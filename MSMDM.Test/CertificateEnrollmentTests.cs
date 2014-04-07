@@ -6,6 +6,7 @@ using System.Net;
 
 namespace MSMDM.Test
 {
+    // http://blogs.msdn.com/b/wsdevsol/archive/2013/10/03/troubleshooting-your-windows-phone-8-enterprise-mobile-device-management-implementation.aspx
 
     [TestClass]
     public class CertificateEnrollmentTests
