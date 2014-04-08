@@ -1,7 +1,18 @@
-﻿using System;
+﻿using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Crypto.Parameters;
+using Org.BouncyCastle.Crypto.Prng;
+using Org.BouncyCastle.Math;
+using Org.BouncyCastle.Pkcs;
+using Org.BouncyCastle.Security;
+using Org.BouncyCastle.Utilities;
+using Org.BouncyCastle.X509;
+using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Web;
 using System.Web.Mvc;
@@ -11,6 +22,15 @@ namespace MSMDM.Controllers
     [RoutePrefix("EnrollmentServer")]
     public class EnrollmentController : Controller
     {
+        [HttpGet] // used by windows 8.1
+        [Route("contract")]
+        public ActionResult GetContract()
+        {
+            string response = @"{""DeviceRegistrationService"":{""RegistrationEndpoint"":""https:\/\/sts.contoso.com\/EnrollmentServer\/DeviceEnrollmentWebService.svc"",""RegistrationResourceId"":""urn:ms-drs:sts.contoso.com"",""ServiceVersion"":""1.0""},""AuthenticationService"":{""OAuth2"":{""AuthCodeEndpoint"":""https:\/\/sts.contoso.com\/adfs\/oauth2\/authorize"",""TokenEndpoint"":""https:\/\/sts.con toso.com\/adfs\/oauth2\/token""}},""IdentityProviderService"":{""PassiveAuthEndpoint"":""https:\/\/ sts.contoso.com\/adfs\/ls""}}";
+
+            return Content(response, "application/json");
+        }
+
         [HttpGet]
         [Route("Discovery.svc")]
         public ActionResult GetDiscovery()
@@ -32,23 +52,24 @@ namespace MSMDM.Controllers
             Match match = messageIdRegex.Match(request);
             if (match.Success)
             {
-                string template = @"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope"" xmlns:a=""http://www.w3.org/2005/08/addressing"">
-                                   <s:Header>
-                                      <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/DiscoverResponse</a:Action>
-                                      <ActivityId>{0}</ActivityId>
-                                      <a:RelatesTo>{1}</a:RelatesTo> 
-                                   </s:Header>
-                                       <s:Body xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""
-                                          xmlns:xsd=""http://www.w3.org/2001/XMLSchema"">
-                                          <DiscoverResponse
-                                             xmlns=""http://schemas.microsoft.com/windows/management/2012/01/enrollment"">
-                                             <DiscoverResult>
-                                                <AuthPolicy>OnPremise</AuthPolicy>
-                                                <EnrollmentServiceUrl>{2}</EnrollmentServiceUrl>
-                                             </DiscoverResult>
-                                          </DiscoverResponse>
-                                       </s:Body>
-                                    </s:Envelope>";
+                string template = @"
+<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope"" xmlns:a=""http://www.w3.org/2005/08/addressing"">
+    <s:Header>
+        <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/DiscoverResponse</a:Action>
+        <ActivityId>{0}</ActivityId>
+        <a:RelatesTo>{1}</a:RelatesTo> 
+    </s:Header>
+    <s:Body xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""
+        xmlns:xsd=""http://www.w3.org/2001/XMLSchema"">
+        <DiscoverResponse
+            xmlns=""http://schemas.microsoft.com/windows/management/2012/01/enrollment"">
+            <DiscoverResult>
+            <AuthPolicy>OnPremise</AuthPolicy>
+            <EnrollmentServiceUrl>{2}</EnrollmentServiceUrl>
+            </DiscoverResult>
+        </DiscoverResponse>
+    </s:Body>
+</s:Envelope>";
 
                 string enrollmentUrl = "https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Enrollment.svc";
 
@@ -153,136 +174,231 @@ namespace MSMDM.Controllers
             Regex usernameTokenPattern = new Regex(@"<wsse:UsernameToken u:Id=""(?<usernameToken>[a-zA-Z0-9-]+)"">", RegexOptions.Multiline);
             Regex deviceTypePattern = new Regex(@"<ac:ContextItem Name=""DeviceType"">\s+<ac:Value>(?<deviceType>.*)</ac:Value>\s+</ac:ContextItem>", RegexOptions.Multiline);
             Regex applicationVersionPattern = new Regex(@"<ac:ContextItem Name=""ApplicationVersion"">\s+<ac:Value>(?<applicationVersion>.*)</ac:Value>\s+</ac:ContextItem>", RegexOptions.Multiline);
+            Regex binarySecurityTokenPattern = new Regex(@"<wsse:BinarySecurityToken\b[^>]*>(?<securityToken>.*?)</wsse:BinarySecurityToken>", RegexOptions.Multiline);
+            
 
             string messageId = messageIdPattern.Match(request).Groups["messageId"].Value;
             string usernameToken = usernameTokenPattern.Match(request).Groups["usernameToken"].Value;
             string deviceType = deviceTypePattern.Match(request).Groups["deviceType"].Value;
             string applicationVersion = applicationVersionPattern.Match(request).Groups["applicationVersion"].Value;
-
+            string securityToken = binarySecurityTokenPattern.Match(request).Groups["securityToken"].Value;
 
             string template = @"
 <s:Envelope xmlns:s=""http://schemas.xmlsoap.org/soap/envelope/""
-   xmlns:a=""http://www.w3.org/2005/08/addressing""
-   xmlns:u=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
-   <s:Header>
-      <Action s:mustUnderstand=""1"" >
-         http://schemas.microsoft.com/windows/pki/2009/01/enrollment/RSTRC/wstep
-      </Action>
-      <a:RelatesTo>{0}</a:RelatesTo>
-      <o:Security s:mustUnderstand=""1"" xmlns:o=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
-         <u:Timestamp u:Id=""_0"">
+    xmlns:a=""http://www.w3.org/2005/08/addressing""
+    xmlns:u=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
+    <s:Header>
+        <Action s:mustUnderstand=""1"" >http://schemas.microsoft.com/windows/pki/2009/01/enrollment/RSTRC/wstep</Action>
+        <a:RelatesTo>{0}</a:RelatesTo>
+        <o:Security s:mustUnderstand=""1"" xmlns:o=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
+            <u:Timestamp u:Id=""_0"">
             <u:Created>2014-04-01T00:32:59.420Z</u:Created>
             <u:Expires>2020-04-01T00:37:59.420Z</u:Expires>
-         </u:Timestamp>
-      </o:Security>
-   </s:Header>
-   <s:Body>
-      <RequestSecurityTokenResponseCollection
-         xmlns=""http://docs.oasis-open.org/ws-sx/ws-trust/200512"">
-         <RequestSecurityTokenResponse>
+            </u:Timestamp>
+        </o:Security>
+    </s:Header>
+    <s:Body>
+        <RequestSecurityTokenResponseCollection xmlns=""http://docs.oasis-open.org/ws-sx/ws-trust/200512"">
+            <RequestSecurityTokenResponse>
             <TokenType>http://schemas.microsoft.com/5.0.0.0/ConfigurationManager/Enrollment/DeviceEnrollmentToken</TokenType>
             <RequestedSecurityToken>
-               <BinarySecurityToken
-                  ValueType=""http://schemas.microsoft.com/5.0.0.0/ConfigurationManager/Enrollment/DeviceEnrollmentProvisionDoc""
-                  EncodingType=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd#base64binary""
-                  xmlns=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
-                  {1}
-               </BinarySecurityToken>
+                <BinarySecurityToken
+                    ValueType=""http://schemas.microsoft.com/5.0.0.0/ConfigurationManager/Enrollment/DeviceEnrollmentProvisionDoc""
+                    EncodingType=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd#base64binary""
+                    xmlns=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
+                    {1}
+                </BinarySecurityToken>
             </RequestedSecurityToken>
-            <RequestID xmlns=""http://schemas.microsoft.com/windows/pki/2009/01/enrollment"">0
-            </RequestID>
-         </RequestSecurityTokenResponse>
-      </RequestSecurityTokenResponseCollection>
-   </s:Body>
-</s:Envelope>
-    ";
+            <RequestID xmlns=""http://schemas.microsoft.com/windows/pki/2009/01/enrollment"">0</RequestID>
+            </RequestSecurityTokenResponse>
+        </RequestSecurityTokenResponseCollection>
+    </s:Body>
+</s:Envelope>";
 
-            response = string.Format(template, messageId, GetToken());
+            response = string.Format(template, messageId, GetToken(securityToken));
 
             return Content(response, "application/soap+xml", System.Text.Encoding.UTF8);
         }
 
-        private string GetToken()
+        const int strength = 2048;
+        const string signatureAlgorithm = "SHA256WithRSA";
+
+        private static System.Security.Cryptography.X509Certificates.X509Certificate2 LoadCertificate(string issuerFileName, string password)
         {
-            string token = @"
-<wap-provisioningdoc version=""1.1"">
-   <characteristic type=""CertificateStore"">
-      <characteristic type=""Root"">
-         <characteristic type=""System"">
-            <characteristic type=""031336C933CC7E228B88880D78824FB2909A0A2F"">
-               <parm name=""EncodedCertificate"" value=""B64 encoded cert insert here"" />
+            var issuerCertificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(issuerFileName, password, System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.Exportable);
+            return issuerCertificate;
+        }
+
+        private CertSignResponse GenerateSignedCertificate(Org.BouncyCastle.Asn1.Pkcs.CertificationRequestInfo csrInfo)
+        {
+            RsaPublicKeyStructure publicKeyStructure = RsaPublicKeyStructure.GetInstance(csrInfo.SubjectPublicKeyInfo.GetPublicKey());
+            RsaKeyParameters subjectPublicKey = new RsaKeyParameters(false, publicKeyStructure.Modulus, publicKeyStructure.PublicExponent);
+
+            var issuerCertificate = LoadCertificate(@"c:\ca\CAKey.pfx", null);
+            var issuerName = issuerCertificate.Subject;
+            var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
+            var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
+
+            var randomGenerator = new CryptoApiRandomGenerator();
+            var random = new SecureRandom(randomGenerator);
+
+            var serialNumber = BigIntegers.CreateRandomInRange(
+                       BigInteger.One,
+                       BigInteger.ValueOf(Int64.MaxValue),
+                       random);
+
+            var certificateGenerator = new X509V3CertificateGenerator();
+
+            var issuerDN = new X509Name(issuerName);
+            certificateGenerator.SetIssuerDN(issuerDN);
+
+            certificateGenerator.SetSerialNumber(serialNumber);
+            certificateGenerator.SetSignatureAlgorithm(signatureAlgorithm);
+
+            //certificateGenerator.SetSubjectDN(csrInfo.Subject);
+            certificateGenerator.SetSubjectDN(new X509Name("CN=MSMDM Device"));
+            certificateGenerator.SetPublicKey(subjectPublicKey);
+
+            ///// For Server Certificates Only
+            //var subjectAlternativeNames = new Asn1Encodable[]
+            //                                    {
+            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment"),
+            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment.dynamit.com.au")
+            //                                    };
+            //var subjectAlternativeNamesExtension = new DerSequence(subjectAlternativeNames);
+            //certificateGenerator.AddExtension(X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);
+
+            certificateGenerator.AddExtension(X509Extensions.KeyUsage.Id, false, new KeyUsage(0xa0));
+
+            certificateGenerator.AddExtension(X509Extensions.ExtendedKeyUsage.Id, false, new ExtendedKeyUsage(new ArrayList() 
+                                                                                                                    { 
+                                                                                                                        KeyPurposeID.IdKPClientAuth,
+                                                                                                                        new DerObjectIdentifier("1.3.6.1.4.1.311.65.2.1")
+                                                                                                                    }));
+
+            var notBefore = DateTime.UtcNow.Date;
+            var notAfter = notBefore.AddYears(1);
+
+            certificateGenerator.SetNotBefore(notBefore);
+            certificateGenerator.SetNotAfter(notAfter);
+
+            // Add CA Reference to Chain
+            var authorityKeyIdentifierExtension =
+              new AuthorityKeyIdentifier(
+                  SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(issuerKeyPair.Public),
+                  new GeneralNames(new GeneralName(issuerDN)),
+                  issuerSerialNumber);
+            certificateGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false, authorityKeyIdentifierExtension);
+
+            var subjectKeyIdentifierExtension =
+                         new SubjectKeyIdentifier(
+                             SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(subjectPublicKey));
+            certificateGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier.Id, false, subjectKeyIdentifierExtension);
+
+            var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
+
+            certificate.Verify(issuerKeyPair.Public);
+            System.Security.Cryptography.X509Certificates.X509Certificate msCert = DotNetUtilities.ToX509Certificate(certificate);
+
+            string issuerBase64 = Convert.ToBase64String(issuerCertificate.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
+            string issuerSerial = issuerCertificate.GetSerialNumberString();
+            
+            string certBase64 = Convert.ToBase64String(msCert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
+            string certSerial = msCert.GetSerialNumberString();
+
+            System.IO.File.WriteAllText(@"c:\ca\enroll-" + msCert.GetSerialNumberString() + ".cer", ExportToPEM(msCert));
+            
+            return new CertSignResponse(issuerBase64, issuerSerial, certBase64, certSerial);
+        }
+
+        public static string ExportToPEM(System.Security.Cryptography.X509Certificates.X509Certificate cert)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            builder.AppendLine("-----BEGIN CERTIFICATE-----");
+            builder.AppendLine(Convert.ToBase64String(cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert), Base64FormattingOptions.InsertLineBreaks));
+            builder.AppendLine("-----END CERTIFICATE-----");
+
+            return builder.ToString();
+        }
+
+        private string GetToken(string binarySecurityToken)
+        {
+            byte[] encoded = Convert.FromBase64String(binarySecurityToken);
+            var csr = new Pkcs10CertificationRequest(encoded);
+
+            var requestInfo = csr.GetCertificationRequestInfo();
+
+            CertSignResponse response = GenerateSignedCertificate(requestInfo);
+
+            string template = @"<wap-provisioningdoc version=""1.1"">
+    <characteristic type=""CertificateStore"">
+        <characteristic type=""Root"">
+            <characteristic type=""System"">
+                <characteristic type=""{0}"">
+                    <parm name=""EncodedCertificate"" value=""{1}"" />
+                </characteristic>
             </characteristic>
-         </characteristic>
-      </characteristic>
-      <characteristic type=""My"" >
-      <!-- ""My"" and “User” are case-sensitive -->
-         <characteristic type=""User"">
-            <characteristic type=""F9A4F20FC50D990FDD0E3DB9AFCBF401818D5462"">
-               <parm name=""EncodedCertificate"" value=""B64EncodedCertInsertedHere"" /> 
+        </characteristic>
+        <characteristic type=""My"" >
+            <characteristic type=""User"">
+                <characteristic type=""{2}"">
+                    <parm name=""EncodedCertificate"" value=""{3}"" /> 
+                </characteristic>
+                <characteristic type=""PrivateKeyContainer""/>
+                <!-- This tag must be present for XML syntax correctness. -->
             </characteristic>
-            <characteristic type=""PrivateKeyContainer""/>
-            <!-- This tag must be present for XML syntax correctness. -->
-         </characteristic>
-      </characteristic>
-   </characteristic>
-   <characteristic type=""APPLICATION"">
-      <parm name=""APPID"" value=""w7""/>
-      <parm name=""PROVIDER-ID"" value=""TestMDMServer""/>
-      <parm name=""NAME"" value=""Microsoft""/>
-      <parm name=""ADDR"" value=""https://DM.contoso.com:443/omadm/WindowsPhone.ashx""/>
-      <parm name=""CONNRETRYFREQ"" value=""6"" />
-      <parm name=""INITIALBACKOFFTIME"" value=""30000"" />
-      <parm name=""MAXBACKOFFTIME"" value=""120000"" />
-      <parm name=""BACKCOMPATRETRYDISABLED"" />
-      <parm name=""DEFAULTENCODING"" value=""application/vnd.syncml.dm+wbxml"" />
-      <parm name=""SSLCLIENTCERTSEARCHCRITERIA"" value=""Subject=DC%3dcom%2cDC%3dmicrosoft%2cCN%3dUsers%2cCN%3dAdministrator&amp;Stores=My%5CUser""/>
-      <characteristic type=""APPAUTH"">
+        </characteristic>
+    </characteristic>
+    <characteristic type=""APPLICATION"">
+        <parm name=""APPID"" value=""w7""/>
+        <parm name=""PROVIDER-ID"" value=""TestMDMServer""/>
+        <parm name=""NAME"" value=""Microsoft""/>
+        <parm name=""ADDR"" value=""https://enterpriseenrollment.dynamit.com.au:443/""/>
+        <parm name=""CONNRETRYFREQ"" value=""6"" />
+        <parm name=""INITIALBACKOFFTIME"" value=""30000"" />
+        <parm name=""MAXBACKOFFTIME"" value=""120000"" />
+        <parm name=""BACKCOMPATRETRYDISABLED"" />
+        <parm name=""DEFAULTENCODING"" value=""application/vnd.syncml.dm+wbxml"" />
+        <parm name=""SSLCLIENTCERTSEARCHCRITERIA"" value=""Subject=CN%3dMSMDM%20Device&amp;Stores=My%5CUser""/>
+        <characteristic type=""APPAUTH"">
         <parm name=""AAUTHLEVEL"" value=""CLIENT""/>
-        <parm name=""AAUTHTYPE"" value=""DIGEST""/>
-        <parm name=""AAUTHSECRET"" value=""password1""/>
-        <parm name=""AAUTHDATA"" value=""B64encodedBinaryNonceInsertedHere""/>
-      </characteristic>
-      <characteristic type=""APPAUTH"">
-         <parm name=""AAUTHLEVEL"" value=""APPSRV""/>
-         <parm name=""AAUTHTYPE"" value=""BASIC""/>
-         <parm name=""AAUTHNAME"" value=""testclient""/>
-         <parm name=""AAUTHSECRET"" value=""password2""/>
-      </characteristic>
-   </characteristic>
-   <characteristic type=""Registry"">
-      <characteristic type=""HKLM\Software\Microsoft\Enrollment"">
-         <parm name=""RenewalPeriod"" value=""42"" datatype=""integer"" />
-      </characteristic>
-      <characteristic type=""HKLM\Software\Microsoft\Enrollment\OmaDmRetry"">
-         <parm name=""NumRetries"" value=""8"" datatype=""integer"" />
-         <parm name=""RetryInterval"" value=""15"" datatype=""integer"" />
-         <parm name=""AuxNumRetries"" value=""5"" datatype=""integer"" />
-         <parm name=""AuxRetryInterval"" value=""3"" datatype=""integer"" />
-         <parm name=""Aux2NumRetries"" value=""0"" datatype=""integer"" />
-         <!-- Retry waiting interval less than 60 minutes isn’t suggested due to impact to data comsumption and battery life. -->
-         <parm name=""Aux2RetryInterval"" value=""480"" datatype=""integer"" />
-      </characteristic>
-   </characteristic>
-   <characteristic type=""DMClient"">
-      <characteristic type=""Provider"">
-         <characteristic type=""TestMDMServer"">
+        <parm name=""AAUTHTYPE"" value=""BASIC""/>
+        <parm name=""AAUTHNAME"" value=""testclient""/>
+        <parm name=""AAUTHSECRET"" value=""password2""/>
+        </characteristic>
+        <characteristic type=""APPAUTH"">
+            <parm name=""AAUTHLEVEL"" value=""APPSRV""/>
+            <parm name=""AAUTHTYPE"" value=""BASIC""/>
+            <parm name=""AAUTHNAME"" value=""testclient""/>
+            <parm name=""AAUTHSECRET"" value=""password2""/>
+        </characteristic>
+    </characteristic>
+    <characteristic type=""Registry"">
+        <characteristic type=""HKLM\Software\Microsoft\Enrollment"">
+            <parm name=""RenewalPeriod"" value=""42"" datatype=""integer"" />
+        </characteristic>
+        <characteristic type=""HKLM\Software\Microsoft\Enrollment\OmaDmRetry"">
+            <parm name=""NumRetries"" value=""8"" datatype=""integer"" />
+            <parm name=""RetryInterval"" value=""15"" datatype=""integer"" />
+            <parm name=""AuxNumRetries"" value=""5"" datatype=""integer"" />
+            <parm name=""AuxRetryInterval"" value=""3"" datatype=""integer"" />
+            <parm name=""Aux2NumRetries"" value=""0"" datatype=""integer"" />
+            <parm name=""Aux2RetryInterval"" value=""480"" datatype=""integer"" />
+        </characteristic>
+    </characteristic>
+    <characteristic type=""DMClient"">
+        <characteristic type=""Provider"">
+            <characteristic type=""TestMDMServer"">
             <parm name=""EntDeviceName"" value=""Administrator_WindowsPhone"" datatype=""string"" />
-         </characteristic>
-      </characteristic>
-   </characteristic>
-   <!—Specify application Enrollment Token (AET) in EnrollmenToken node, provide URL for downloading company app hub apps, specify client certificate search criteria for downloading company app from SSL server that requires client cert based authentication . -->
-   <characteristic type=""EnterpriseAppManagement""> 
-      <characteristic type=""EnterpriseIDInsertedHere"">
-          <parm datatype=""string"" name=""EnrollmentToken"" value=""AETInsertedHere""/> <parm datatype=""string"" name=""StoreProductId"" value=""AppProductIDInsertedHere""/> 
-          <parm datatype=""string"" name=""StoreURI"" value=""HTTPS://DM.contoso.com:443/EnrollmentServer/clientcabs/EnterpriseApp1.xap""/>
-          <parm datatype=""string"" name=""StoreName"" value=""Contoso App Store""/>
-          <parm datatype=""string"" name=""CertificateSearchCriteria"" value=""ClientCertSearchCriteriaInsertedHere""/>
-          <parm datatype=""string"" name=""CRLCheck"" value=""0""/>
-      </characteristic>
-   </characteristic>
+            </characteristic>
+        </characteristic>
+    </characteristic>
 </wap-provisioningdoc>";
 
-            return EncodeToBase64(token);
+            string fullToken = string.Format(template, response.IssuerSerial, response.IssuerBase64, response.CertSerial, response.CertBase64);
+
+            return EncodeToBase64(fullToken);
         }
 
         static public string EncodeToBase64(string toEncode)
@@ -295,25 +411,8 @@ namespace MSMDM.Controllers
         [Route("CACert.cer")]
         public ActionResult CACert()
         {
-            return Content(@"-----BEGIN CERTIFICATE-----
-MIIDBTCCAe2gAwIBAgIQKzhdbbSbU79PWrlTQ7jTlzANBgkqhkiG9w0BAQUFADAV
-MRMwEQYDVQQDEwppbkJldGEgTURNMB4XDTE0MDQwNzEwMzEyOFoXDTE5MDQwNzEw
-NDEyOFowFTETMBEGA1UEAxMKaW5CZXRhIE1ETTCCASIwDQYJKoZIhvcNAQEBBQAD
-ggEPADCCAQoCggEBAKJSsvnFBHOH49mJYAJ3NbJwle/sRNvV+9fyC0Lw3pU/XydO
-z0/NBGyyop4JGomqr7VP0RFx6rCgemPI9FhQ7JCBCFA7U9OLj3kFbZ/vZ268qJ7B
-F6RnDe1d9chfrXravc+yOO7z2eH7s0f5Cg8ZepfLcM5DOR3Yu/f+Q3iDGDlWST91
-683t3mS7Iy8paGVX+2xK3XHfoyyZTIeI0G1kC/904Bvni1Lj56d64rlLb5LxXrx3
-t2wsjg12LFJ5Kffg6gGbmfY93UPVtkoue5trqxV+MoAXvi6PNNdeeuOC4iyvqUmL
-b93nHDgQtzvbyaC5sdGehRPlo8u+KwBQ7Y5i07sCAwEAAaNRME8wCwYDVR0PBAQD
-AgGGMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFGtQrYkJcz/LMa8J2jMFgwf5
-oi8GMBAGCSsGAQQBgjcVAQQDAgEAMA0GCSqGSIb3DQEBBQUAA4IBAQA+itTytErG
-GGwcf4/Pxa8lXrKNtN2Y2lg8BpEo1QyiN7ofH0TIoR/ko6Jd9ig0OMY+g3EDnAUz
-GJ1NY+LE5+RM+4FglUwhsAY/2AKwENa8OW+sa8NKjRHSjzyls7zhx4fR54nWH99g
-Tkhizfo2Y17aE4yZjeWT5vvGfjy1RChm967e2yvm463c+iu3+cHS7AaoWhpoJ09D
-8FzTXcP65PXLxUGxF6UvYNB+ofo6J5v97SLc7JZsvlPJOOy7H3NRFy4uM6h1R3+S
-P9ErbS2QMacPQboaop20xhDXFgKzTcHPV/ae8XMdyB2ceZ9JXT0KRB/BfccmaYH1
-sBSc9I2M1RJr
------END CERTIFICATE-----", 
+            string cert = System.IO.File.ReadAllText(@"c:\ca\CACert.cer");
+            return Content(cert, 
             "application/x-x509-ca-cert");
         }
     }

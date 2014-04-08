@@ -39,7 +39,7 @@ namespace MSMDM.Test
         [TestMethod]
         public void CreateCACert()
         {
-            const string subjectName = "CN=Lotteries Root CA, O=Lotteries Development,C=AU";
+            const string subjectName = "CN=MDM CA";
 
             var randomGenerator = new CryptoApiRandomGenerator();
             var random = new SecureRandom(randomGenerator);
@@ -118,7 +118,7 @@ namespace MSMDM.Test
         [TestMethod]
         public void SignRequestTest()
         {
-            string filename = @"\\TA030324\Lab\iis_csr.cer";
+            string filename = @"c:\ca\enterpriseenrollment.dynamit.com.au.req";
             //byte[] der = System.IO.File.ReadAllBytes(filename);
 
             TextReader reader = File.OpenText(filename);
@@ -155,6 +155,19 @@ namespace MSMDM.Test
 
             certificateGenerator.SetSubjectDN(csrInfo.Subject);
             certificateGenerator.SetPublicKey(subjectPublicKey);
+
+            ///// For Server Certificates Only
+            //var subjectAlternativeNames = new Asn1Encodable[]
+            //                                    {
+            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment"),
+            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment.dynamit.com.au")
+            //                                    };
+            //var subjectAlternativeNamesExtension = new DerSequence(subjectAlternativeNames);
+            //certificateGenerator.AddExtension(X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);
+
+            ///// For Server Certificates Only
+            //var usages = new[] { KeyPurposeID.IdKPServerAuth };
+            //certificateGenerator.AddExtension(X509Extensions.ExtendedKeyUsage.Id, false, new ExtendedKeyUsage(usages));
 
             var notBefore = DateTime.UtcNow.Date;
             var notAfter = notBefore.AddYears(1);
