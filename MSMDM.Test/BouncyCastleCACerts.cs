@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Math;
@@ -24,29 +23,45 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Utilities.IO.Pem;
 using MSCert = System.Security.Cryptography.X509Certificates;
 using System.Diagnostics;
+using NUnit.Framework;
+using Org.BouncyCastle.Asn1.Pkcs;
+using Shouldly;
 
 namespace MSMDM.Test
 {
-    [TestClass]
+    [TestFixture]
     public class BouncyCastleCACerts
     {
+        string CASubjectName = "CN=BouncyCastle CA";
+        string CACertFile = @"CA.cer";
+        string CAKeyFile = @"CA.pfx";
+
+        string CSRSubjectName = "CN=BouncyCastle CSR";
+        private string CSRRequestFile = @"CSR_Request.cer";
+        private string CSRCertFile = @"CSR_Cert.cer";
+        private string CSRKeyFile = @"CSR_Key.cer";
+
         const int strength = 2048;
         const string signatureAlgorithm = "SHA256WithRSA";
+
+        [TestFixtureSetUp]
+        public void Init()
+        {
+
+        }
 
         //
         // http://stackoverflow.com/questions/12679533/how-do-i-use-bouncycastle-to-generate-a-root-certificate-and-then-a-site-certifi
         //
-        [TestMethod]
+        [Test]
         public void CreateCACert()
         {
-            const string subjectName = "CN=MDM CA";
-
             var randomGenerator = new CryptoApiRandomGenerator();
             var random = new SecureRandom(randomGenerator);
 
             var serialNumber = BigIntegers.CreateRandomInRange(
-                                BigInteger.One, 
-                                BigInteger.ValueOf(Int64.MaxValue), 
+                                BigInteger.One,
+                                BigInteger.ValueOf(Int64.MaxValue),
                                 random);
 
             var certificateGenerator = new X509V3CertificateGenerator();
@@ -54,32 +69,17 @@ namespace MSMDM.Test
             certificateGenerator.SetSerialNumber(serialNumber);
             certificateGenerator.SetSignatureAlgorithm(signatureAlgorithm);
 
-            var subjectDN = new X509Name(subjectName);
+            var subjectDN = new X509Name(CASubjectName);
             var issuerDN = subjectDN;
 
             certificateGenerator.SetIssuerDN(issuerDN);
             certificateGenerator.SetSubjectDN(subjectDN);
-
-            //var subjectAlternativeNames = new Asn1Encodable[]
-            //                                    {
-            //                                        new GeneralName(GeneralName.DnsName, "server"),
-            //                                        new GeneralName(GeneralName.DnsName, "server.mydomain.com")
-            //                                    };
-
-            //var subjectAlternativeNamesExtension = new DerSequence(subjectAlternativeNames);
-            //certificateGenerator.AddExtension(X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);
 
             var notBefore = DateTime.UtcNow.Date;
             var notAfter = notBefore.AddYears(10);
 
             certificateGenerator.SetNotBefore(notBefore);
             certificateGenerator.SetNotAfter(notAfter);
-            //var usages = new[] { KeyPurposeID.IdKPServerAuth };
-            //certificateGenerator.AddExtension(
-            //    X509Extensions.ExtendedKeyUsage.Id,
-            //    false,
-            //    new ExtendedKeyUsage(usages));
-
 
             var keyGenerationParameters = new KeyGenerationParameters(random, strength);
 
@@ -105,17 +105,44 @@ namespace MSMDM.Test
             var subjectKeyIdentifier = new SubjectKeyIdentifier(SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(subjectKeyPair.Public));
             certificateGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier.Id, false, subjectKeyIdentifier);
 
+            // This denotes a CA certificate
             certificateGenerator.AddExtension(X509Extensions.BasicConstraints.Id, true, new BasicConstraints(true));
 
             var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
-
             var x509Cert = ConvertCertificate(certificate, subjectKeyPair, random);
 
-            System.IO.File.WriteAllText(@"c:\CA\CACert.cer", ExportToPEM(x509Cert));
-            WriteCertificate(x509Cert, @"c:\CA\CAKey.pfx");
+            File.WriteAllText(CACertFile, ExportToPEM(x509Cert));
+            WriteCertificate(x509Cert, CAKeyFile);
+
+            File.Exists(CACertFile).ShouldBe(true);
+            File.Exists(CAKeyFile).ShouldBe(true);
         }
 
-        [TestMethod]
+        [Test]
+        public void CreateCertificateRequest()
+        {
+            var randomGenerator = new CryptoApiRandomGenerator();
+            var random = new SecureRandom(randomGenerator);
+            var keyGenerationParameters = new KeyGenerationParameters(random, strength);
+
+            var keyPairGenerator = new RsaKeyPairGenerator();
+            keyPairGenerator.Init(keyGenerationParameters);
+            AsymmetricCipherKeyPair subjectKeyPair = keyPairGenerator.GenerateKeyPair();
+            var subjectDN = new X509Name(CSRSubjectName);
+
+            Pkcs10CertificationRequest csr = new Pkcs10CertificationRequest(
+                                                                  signatureAlgorithm,
+                                                                  subjectDN,
+                                                                  subjectKeyPair.Public,
+                                                                  null,
+                                                                  subjectKeyPair.Private);
+
+            
+            File.WriteAllText(CSRRequestFile, ExportToPEM(csr));
+            File.WriteAllText(CSRKeyFile, ExportToPEM(subjectKeyPair));
+        }
+
+        [Test]
         public void SignRequestTest()
         {
             string filename = @"c:\ca\enterpriseenrollment.dynamit.com.au.req";
@@ -129,7 +156,7 @@ namespace MSMDM.Test
 
             RsaPublicKeyStructure publicKeyStructure = RsaPublicKeyStructure.GetInstance(csrInfo.SubjectPublicKeyInfo.GetPublicKey());
             RsaKeyParameters subjectPublicKey = new RsaKeyParameters(false, publicKeyStructure.Modulus, publicKeyStructure.PublicExponent);
-            
+
             bool certIsOK = csr.Verify(subjectPublicKey);
 
             var issuerCertificate = LoadCertificate(@"c:\ca\CAKey.pfx", null);
@@ -194,25 +221,24 @@ namespace MSMDM.Test
 
             certificate.Verify(issuerKeyPair.Public);
             string outputFilename = string.Format(@"c:\CA\Signed-{0}.cer", certificate.SerialNumber.ToString());
-            System.IO.File.WriteAllText(outputFilename, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
+            File.WriteAllText(outputFilename, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
         }
 
-        [TestMethod]
+        [Test]
         public void GetAllTheCerts()
         {
             MSCert.X509Store store = new MSCert.X509Store(MSCert.StoreName.My, MSCert.StoreLocation.CurrentUser);
             store.Open(MSCert.OpenFlags.ReadOnly);
-            MSCert.X509Certificate2 cert = store.Certificates.Cast<MSCert.X509Certificate2>().SingleOrDefault(p => p.SerialNumber == "73920EFD4D9F1D3F7AAF");
+            var certs = store.Certificates.Cast<MSCert.X509Certificate2>().ToList();
 
-            Assert.IsNotNull(cert);
+            Assert.IsNotNull(certs);
         }
 
-        [TestMethod]
+        [Test]
         public void IssueClientCert()
         {
-            string subjectName = "CN=Test Certificate Creation";
+            string subjectName = "CN=ClientCertificate";
 
-            //var issuerCertificate = LoadCertificate(@"c:\ca\CAKey.pfx", null);
             var issuerCertificate = LoadCertificate(@"c:\ca\mypfx.pfx", "");
             var issuerName = issuerCertificate.Subject;
             var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
@@ -269,14 +295,14 @@ namespace MSMDM.Test
             certificateGenerator.AddExtension(X509Extensions.BasicConstraints.Id, true, new BasicConstraints(false));
 
             var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
-            
+
             string outputFilename = string.Format(@"c:\CA\Issued-{0}.cer", certificate.SerialNumber.ToString());
-            System.IO.File.WriteAllText(outputFilename, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
+            File.WriteAllText(outputFilename, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
         }
 
         string[] certs = new string[] { };
 
-        [TestMethod]
+        [Test]
         public void ReadIssued()
         {
             string filename = @"c:\ca\Issued-1715698592009644032.cer";
@@ -285,7 +311,7 @@ namespace MSMDM.Test
             PkixCertPathBuilder builder = new PkixCertPathBuilder();
 
             // Separate root from itermediate
-            var intermediateCerts = new List<Org.BouncyCastle.X509.X509Certificate>();
+            var intermediateCerts = new List<X509Certificate>();
             HashSet rootCerts = new HashSet();
 
             foreach (string certString in certs)
@@ -340,11 +366,37 @@ namespace MSMDM.Test
             return issuerCertificate;
         }
 
-        /// <summary>
-        /// Export a certificate to a PEM format string
-        /// </summary>
-        /// <param name="cert">The certificate to export</param>
-        /// <returns>A PEM encoded string</returns>
+        public static string ExportToPEM(Pkcs10CertificationRequest csr)
+        {
+            string result;
+            using (MemoryStream mem = new MemoryStream())
+            {
+                StreamWriter writer = new StreamWriter(mem);
+                Org.BouncyCastle.OpenSsl.PemWriter pem = new Org.BouncyCastle.OpenSsl.PemWriter(writer);
+                pem.WriteObject(csr);
+                pem.Writer.Flush();
+                
+                StreamReader reader = new StreamReader(mem);
+                mem.Position = 0;
+                result = reader.ReadToEnd();
+            }
+
+            return result;
+        }
+
+        public static string ExportToPEM(AsymmetricCipherKeyPair keyPair)
+        {
+            StringBuilder builder = new StringBuilder();
+
+            builder.AppendLine("-----BEGIN RSA PRIVATE KEY-----");
+            PrivateKeyInfo privateKeyInfo = PrivateKeyInfoFactory.CreatePrivateKeyInfo(keyPair.Private);
+            byte[] serializedPrivateBytes = privateKeyInfo.ToAsn1Object().GetDerEncoded();
+            builder.AppendLine(Convert.ToBase64String(serializedPrivateBytes, Base64FormattingOptions.InsertLineBreaks));
+            builder.AppendLine("-----BEGIN RSA PRIVATE KEY-----");
+
+            return builder.ToString();
+        }
+
         public static string ExportToPEM(MSCert.X509Certificate cert)
         {
             StringBuilder builder = new StringBuilder();
@@ -392,7 +444,7 @@ namespace MSMDM.Test
             var convertedCertificate =
                 new MSCert.X509Certificate2(stream.ToArray(),
                                      password,
-                                     MSCert.X509KeyStorageFlags.PersistKeySet 
+                                     MSCert.X509KeyStorageFlags.PersistKeySet
                                         | MSCert.X509KeyStorageFlags.Exportable);
 
             return convertedCertificate;

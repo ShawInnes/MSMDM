@@ -1,34 +1,18 @@
 ﻿using System;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Xml;
 using System.Text.RegularExpressions;
 using System.Net;
+using NUnit.Framework;
 
 namespace MSMDM.Test
 {
     // http://blogs.msdn.com/b/wsdevsol/archive/2013/10/03/troubleshooting-your-windows-phone-8-enterprise-mobile-device-management-implementation.aspx
 
-    [TestClass]
+    [TestFixture]
     public class CertificateEnrollmentTests
     {
-        private TestContext _TestContextInstance;
 
-        /// <summary>
-        ///Gets or sets the test context which provides
-        ///information about and functionality for the current test run.
-        ///</summary>
-        public TestContext TestContext
-        {
-            get
-            {
-                return _TestContextInstance;
-            }
-            set
-            {
-                _TestContextInstance = value;
-            }
-        }
-        [TestMethod]
+        [Test]
         public void Test()
         {
             //Perform the cert req
