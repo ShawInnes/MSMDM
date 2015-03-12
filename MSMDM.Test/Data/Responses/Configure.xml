@@ -1,0 +1,48 @@
+﻿<Settings>
+  <AuthenticationServiceUrl>https://enterpriseenrollment.kangzer.com/EnrollmentServer/LoginSTS.aspx</AuthenticationServiceUrl>
+  <!--Policy Service is optional for windows 8-->
+  <EnrollmentPolicyServiceUrl>https://enterpriseenrollment.kangzer.com/EnrollmentServer/EnrollmentPolicy.svc</EnrollmentPolicyServiceUrl>
+  <EnrollmentServiceUrl>https://enterpriseenrollment.kangzer.com/EnrollmentServer/EnrollmentService.svc</EnrollmentServiceUrl>  
+  <CertificateServiceUrl>https://ca.kangzer.com/CertRequestSrv/CertRequest.svc/</CertificateServiceUrl>
+  <!--for push notification-->  
+  <Windows8Settings>    
+    <SyncMLServiceUrl>https://enterpriseenrollment.kangzer.com/SyncMLServer/SyncMLServiceForWin8.svc</SyncMLServiceUrl>
+    <!--for push notification-->
+    <PackageFullName>57187hanhsia.MDMLight_5qcn2dtvx7y2y</PackageFullName>
+    <ApplicationID>s-1-15-2-958628140-1654187270-2287700166-3277238650-69854037-667584149-2268670743</ApplicationID>
+    <PROVIDER-ID>MDMLightService</PROVIDER-ID>
+    <!-- ClientAppAuth and ServerAppAuth are not used but must exist-->
+    <ClientAppAuth>
+      <AAUTHTYPE>DIGEST</AAUTHTYPE>
+      <AAUTHNAME>Server</AAUTHNAME>
+      <AAUTHSECRET>dummy</AAUTHSECRET>
+      <AAUTHDATA>bm9uY2U=</AAUTHDATA>
+    </ClientAppAuth>
+    <ServerAppAuth>
+      <AAUTHTYPE>BASIC</AAUTHTYPE>
+      <AAUTHNAME>Client</AAUTHNAME>
+      <AAUTHSECRET>dummy</AAUTHSECRET>
+      <AAUTHDATA>bm9uY2U=</AAUTHDATA>
+    </ServerAppAuth>
+  </Windows8Settings>
+  <WindowsPhone8Settings>
+    <SyncMLServiceUrl>https://enterpriseenrollment.kangzer.com/SyncMLServer/SyncMLService.svc</SyncMLServiceUrl>
+    <PackageFullName>57187hanhsia.MDMLight_5qcn2dtvx7y2y</PackageFullName>
+    <ApplicationID>s-1-15-2-958628140-1654187270-2287700166-3277238650-69854037-667584149-2268670743</ApplicationID>
+    <PROVIDER-ID>MDMLightService</PROVIDER-ID>
+    <ClientAppAuth>
+      <AAUTHTYPE>DIGEST</AAUTHTYPE>
+      <AAUTHNAME>Server</AAUTHNAME>
+      <AAUTHSECRET>dummy</AAUTHSECRET>
+      <AAUTHDATA>bm9uY2U=</AAUTHDATA>
+    </ClientAppAuth>
+    <ServerAppAuth>
+      <AAUTHTYPE>BASIC</AAUTHTYPE>
+      <AAUTHNAME>Client</AAUTHNAME>
+      <AAUTHSECRET>dummy</AAUTHSECRET>
+      <AAUTHDATA>bm9uY2U=</AAUTHDATA>
+    </ServerAppAuth>
+  </WindowsPhone8Settings>
+  <!--Only useful for WP so far-->
+  
+</Settings>

@@ -1,0 +1,17 @@
+﻿<?xml version="1.0"?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing">
+	<s:Header>
+		<a:Action s:mustUnderstand="1">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/DiscoverResponse</a:Action>
+		<ActivityId>{0}</ActivityId>
+		<a:RelatesTo>urn:uuid:748132ec-a575-4329-b01b-6171a9cf8478</a:RelatesTo>
+	</s:Header>
+	<s:Body xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+		<DiscoverResponse xmlns="http://schemas.microsoft.com/windows/management/2012/01/enrollment">
+			<DiscoverResult>
+				<AuthPolicy>OnPremise</AuthPolicy>
+				<EnrollmentPolicyServiceUrl>https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Service.svc</EnrollmentPolicyServiceUrl>
+				<EnrollmentServiceUrl>https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Service.svc</EnrollmentServiceUrl>
+			</DiscoverResult>
+		</DiscoverResponse>
+	</s:Body>
+</s:Envelope>

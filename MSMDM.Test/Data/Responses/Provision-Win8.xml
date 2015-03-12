@@ -1,0 +1,40 @@
+﻿<wap-provisioningdoc version="1.1">
+  <characteristic type="CertificateStore">
+  </characteristic>
+  <characteristic type="APPLICATION">
+    <parm name="APPID" value="w7"/>
+    <parm name="PROVIDER-ID"/>
+    <parm name="NAME" value="MDMLight Service"/>
+    <parm name="SSPHyperlink" value="http://go.microsoft.com/fwlink/?LinkId=255310" />
+    <parm name="ServerList"/>
+    <parm name="ADDR"/>
+    <parm name="ROLE" value="4294967295"/>
+    <parm name="CRLCheck" value="0"/>
+    <parm name="CONNRETRYFREQ" value="6" />
+    <parm name="INITIALBACKOFFTIME" value="30000" />
+    <parm name="MAXBACKOFFTIME" value="120000" />
+    <parm name="BACKCOMPATRETRYDISABLED" />
+    <parm name="DEFAULTENCODING" value="application/vnd.syncml.dm+wbxml" />
+    <parm name="SSLCLIENTCERTSEARCHCRITERIA"/>
+  </characteristic>
+  <characteristic type="Registry">
+    <characteristic type="HKLM\Security\MachineEnrollment">
+      <parm name="RenewalPeriod" value="42" datatype="integer" />
+    </characteristic>
+    <characteristic type="HKLM\Security\MachineEnrollment\OmaDmRetry">
+      <parm name="NumRetries" value="8" datatype="integer" />
+      <parm name="RetryInterval" value="15" datatype="integer" />
+      <parm name="AuxNumRetries" value="10" datatype="integer" />
+      <parm name="AuxRetryInterval" value="1" datatype="integer" />
+      <parm name="Aux2NumRetries" value="0" datatype="integer" />
+      <parm name="Aux2RetryInterval" value="480" datatype="integer" />
+    </characteristic>
+  </characteristic>
+  <characteristic type="Registry">
+    <characteristic type="HKLM\Software\Windows\CurrentVersion\MDM\MachineEnrollment">
+      <parm name="DeviceName" value="" datatype="string" />
+    </characteristic>
+  </characteristic>
+  <characteristic type="Registry">
+  </characteristic>
+</wap-provisioningdoc>

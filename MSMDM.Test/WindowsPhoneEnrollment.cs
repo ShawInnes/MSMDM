@@ -4,45 +4,40 @@ using System.Text.RegularExpressions;
 using System.Net;
 using Org.BouncyCastle.Pkcs;
 using System.Text;
+using System.Windows.Forms.VisualStyles;
+using ApprovalTests;
+using ApprovalTests.Namers;
+using ApprovalTests.Reporters;
 using NUnit.Framework;
+using Shouldly;
 
 namespace MSMDM.Test
 {
+    [UseReporter(typeof(DiffReporter))]
     [TestFixture]
     public class WindowsPhoneEnrollment
     {
         [Test]
-        public void DiscoveryTest()
+        [TestCase(@"Data\01-DiscoveryRequest.xml", @"Data\01-DiscoveryResponse.xml", "https://enrolltest.contoso.com/ENROLLMENTSERVER/DEVICEENROLLMENTWEBSERVICE.SVC")]
+        [TestCase(@"Data\02-DiscoveryRequest.xml", @"Data\02-DiscoveryResponse.xml", "https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Service.svc")]
+        public void DiscoveryTest(string requestFile, string responseFile, string enrollmentUrl)
         {
-            string xml = @"<s:Envelope xmlns:a=""http://www.w3.org/2005/08/addressing"" xmlns:s=""http://www.w3.org/2003/05/soap-envelope"">
-                        <s:Header>
-                        <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/Discover</a:Action>
-                        <a:MessageID>urn:uuid:748132ec-a575-4329-b01b-6171a9cf8478</a:MessageID>
-                        <a:ReplyTo>
-                            <a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
-                        </a:ReplyTo>
-                        <a:To s:mustUnderstand=""1"">https://EnterpriseEnrollment.dynamit.com.au:443/EnrollmentServer/Discovery.svc</a:To>
-                        </s:Header>
-                        <s:Body>
-                        <Discover xmlns=""http://schemas.microsoft.com/windows/management/2012/01/enrollment"">
-                            <request xmlns:i=""http://www.w3.org/2001/XMLSchema-instance"">
-                                <EmailAddress>m@dynamit.com.au</EmailAddress>
-                                <RequestVersion>1.0</RequestVersion>
-                            </request>
-                        </Discover>
-                        </s:Body>
-                        </s:Envelope>";
+            string requestXml = System.IO.File.ReadAllText(requestFile);
+            string responseXml = System.IO.File.ReadAllText(responseFile);
 
             string response = null;
 
-            Regex pattern = new Regex("<a:MessageID>(?<messageId>[a-z0-9:-]+)</a:MessageID>", RegexOptions.Multiline);
-            Match match = pattern.Match(xml);
-            if (match.Success)
-            {
-                string messageId = match.Groups["messageId"].Value;
-                Assert.IsNotNull(messageId);
+            Regex pattern = new Regex(@"<a:MessageID>(?<messageId>.*)</a:MessageID>", RegexOptions.Multiline);
+            Match match = pattern.Match(requestXml);
+            
+            match.Success.ShouldBe(true);
 
-                string template = @"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope"" xmlns:a=""http://www.w3.org/2005/08/addressing"">
+            string messageId = match.Groups["messageId"].Value;
+            string activityId = "5b005f12-22ac-4294-a2e1-6a69317aae6c";
+
+            messageId.ShouldNotBeNullOrEmpty();
+
+            string template = @"<s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope"" xmlns:a=""http://www.w3.org/2005/08/addressing"">
                                     <s:Header>
                                         <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/DiscoverResponse</a:Action>
                                         <ActivityId>{0}</ActivityId>
@@ -59,11 +54,9 @@ namespace MSMDM.Test
                                     </s:Body>
                                     </s:Envelope>";
 
-                string enrollmentUrl = "https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Service.svc";
-                response = string.Format(template, System.Guid.NewGuid().ToString("D"), messageId, enrollmentUrl, enrollmentUrl);
-            }
+            response = string.Format(template, activityId, messageId, enrollmentUrl, enrollmentUrl);
 
-            Assert.IsNotNull(response);
+            Approvals.VerifyXml(response);
         }
 
         [Test]
@@ -281,7 +274,7 @@ namespace MSMDM.Test
         {
             string token = @"MIICcTCCAV0CAQAwMDEuMCwGA1UEAxMlQjFDNDNDRDAtMTYyNC01RkJCLThFNTQtMzRDRjE3REZEM0ExADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKmxUQiA2yc1hiGoWS9h/6FoNpiCf8mm6FU3h+fKOKR2cFfc9wDV+FxW/VUPm9Tw1boqGFLg6vY71k1RJo3lqi3NOkJltCqnuXStNXgR/4+4hFQtULdUoWX5grTZY1Pg+zN7a/3X1MVMTD+R1f0+zHdlK1w6pWRVp5JP86v9OOSGtE9Eyy/RmhlaYCb8qK2U98WtGCTr55cv24fhVs56S7oTvWAn9VMyBucjXiAxLclyX1kD+m+KQpsvz7BUT7oI/015Xb/t84DthbFavNiBvZ0Z/vHbsCa37gSeSstVztzd7czxEjq4IQKj390zOqsaq4mGL/mWXhzKUNj/M9rU4d0CAwEAAaAAMAkGBSsOAwIdBQADggEBACFeOB6OBiC3mpyzU8R6cFNxG6QDEgbHWIo/6yfdwjueg/A68vjh/qw1kfDxi7P1NHS2wmZt1QgjdVCHEWU/tH0q8Cwm2JCI388ELqlY+j0jV9mhRgwv0oNUBQa+DoVsp+j10AbFKbx3+UVOpi6UQGlV3o/ekH5IfXKF+MY/1S+xDczcB6b5UlqhmHj+a52R+tSYmYg71pVg5LsJ4pKFFu+g6Qy5gXi3yVvIQRBqn03rQM26An24RMAxo5JpSfacI4ewDP5+Eai7xVZyWBXigh/PN+K53fxfVksCaiukGYvqGbad3nUUZwwxWVg7sLCTut56q0f1Z6xwJakBn0CMvVc=";
             byte[] encoded = Convert.FromBase64String(token);
-            var csr = new Pkcs10CertificationRequest(encoded);            
+            var csr = new Pkcs10CertificationRequest(encoded);
         }
 
         [Test]
@@ -292,7 +285,7 @@ namespace MSMDM.Test
             System.Security.Cryptography.X509Certificates.X509Certificate cert = new System.Security.Cryptography.X509Certificates.X509Certificate(bytes);
 
             string hash = cert.GetCertHashString();
-            
+
             string encoded = Convert.ToBase64String(cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
 
             Assert.AreEqual(data, encoded);
