@@ -1,11 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.30324.0
+VisualStudioVersion = 12.0.31101.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSMDM", "MSMDM\MSMDM.csproj", "{80F4A149-B90B-4EF6-AC22-D712C61E3F8D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSMDM.Test", "MSMDM.Test\MSMDM.Test.csproj", "{95C456D2-B892-4587-BE71-73AD72C15CC9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSMDM.AutomationTest", "MSMDM.AutomationTest\MSMDM.AutomationTest.csproj", "{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "EnvironmentSetup", "EnvironmentSetup", "{9B10652E-77D2-4E03-B591-9E3792F8650B}"
+	ProjectSection(SolutionItems) = preProject
+		SetupDevelopmentIIS.ps1 = SetupDevelopmentIIS.ps1
+		SetupTools.psm1 = SetupTools.psm1
+	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MSMDM.Core", "MSMDM.Core\MSMDM.Core.csproj", "{D98CFF61-2984-4A18-B33A-5E21667E69C7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +31,14 @@ Global
 		{95C456D2-B892-4587-BE71-73AD72C15CC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{95C456D2-B892-4587-BE71-73AD72C15CC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{95C456D2-B892-4587-BE71-73AD72C15CC9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D98CFF61-2984-4A18-B33A-5E21667E69C7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D98CFF61-2984-4A18-B33A-5E21667E69C7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D98CFF61-2984-4A18-B33A-5E21667E69C7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D98CFF61-2984-4A18-B33A-5E21667E69C7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -3,22 +3,19 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProductVersion>
-    </ProductVersion>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{95C456D2-B892-4587-BE71-73AD72C15CC9}</ProjectGuid>
+    <ProjectGuid>{E75E9CD3-CAF5-4BAD-89D3-06A0259E9DCB}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>MSMDM.Test</RootNamespace>
-    <AssemblyName>MSMDM.Test</AssemblyName>
+    <RootNamespace>MSMDM.AutomationTest</RootNamespace>
+    <AssemblyName>MSMDM.AutomationTest</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{3AC096D0-A1C2-E12C-1390-A8335801FDAB};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">10.0</VisualStudioVersion>
     <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
     <ReferencePath>$(ProgramFiles)\Common Files\microsoft shared\VSTT\$(VisualStudioVersion)\UITestExtensionPackages</ReferencePath>
-    <IsCodedUITest>True</IsCodedUITest>
-    <TestProjectType>CodedUITest</TestProjectType>
+    <IsCodedUITest>False</IsCodedUITest>
+    <TestProjectType>UnitTest</TestProjectType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -38,8 +35,11 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="BouncyCastle.Crypto">
-      <HintPath>..\packages\BouncyCastle.1.7.0\lib\Net40-Client\BouncyCastle.Crypto.dll</HintPath>
+    <Reference Include="AFrame.Core">
+      <HintPath>..\packages\AFrame.Core.0.6.3.0\lib\net45\AFrame.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="AFrame.Web">
+      <HintPath>..\packages\AFrame.Web.0.6.3.0\lib\net45\AFrame.Web.dll</HintPath>
     </Reference>
     <Reference Include="nunit.framework, Version=2.6.4.14350, Culture=neutral, PublicKeyToken=96d09a1eb7f44a77, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -49,43 +49,33 @@
       <HintPath>..\packages\Shouldly.2.4.0\lib\net40\Shouldly.dll</HintPath>
     </Reference>
     <Reference Include="System" />
-    <Reference Include="System.Data" />
     <Reference Include="System.Drawing" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.XML" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Xml.Serialization" />
-    <Reference Include="WindowsBase" />
+    <Reference Include="WebDriver">
+      <HintPath>..\packages\Selenium.WebDriver.2.40.0\lib\net40\WebDriver.dll</HintPath>
+    </Reference>
+    <Reference Include="WebDriver.Support">
+      <HintPath>..\packages\Selenium.Support.2.40.0\lib\net40\WebDriver.Support.dll</HintPath>
+    </Reference>
   </ItemGroup>
+  <Choose>
+    <When Condition="('$(VisualStudioVersion)' == '10.0' or '$(VisualStudioVersion)' == '') and '$(TargetFrameworkVersion)' == 'v3.5'">
+      <ItemGroup>
+        <Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework, Version=10.1.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
+      </ItemGroup>
+    </When>
+    <Otherwise />
+  </Choose>
   <ItemGroup>
-    <CodeAnalysisDependentAssemblyPaths Condition=" '$(VS100COMNTOOLS)' != '' " Include="$(VS100COMNTOOLS)..\IDE\PrivateAssemblies">
-      <Visible>False</Visible>
-    </CodeAnalysisDependentAssemblyPaths>
-  </ItemGroup>
-  <ItemGroup>
+    <Compile Include="Modules\EnrollmentPage.cs" />
+    <Compile Include="Modules\HomePage.cs" />
+    <Compile Include="TestBase.cs" />
+    <Compile Include="Tests\HomePageTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="CertificateEnrollmentTests.cs" />
-    <Compile Include="BouncyCastleCACerts.cs" />
-    <Compile Include="WindowsPhoneEnrollment.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="IIS_Request.cer">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
     <None Include="packages.config" />
-    <None Include="Test_Request.cer">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
   </ItemGroup>
-  <ItemGroup>
-    <Content Include="Data\EnrollmentResponse.xml" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\MSMDM.Core\MSMDM.Core.csproj">
-      <Project>{d98cff61-2984-4a18-b33a-5e21667e69c7}</Project>
-      <Name>MSMDM.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
+  <ItemGroup />
   <Choose>
     <When Condition="'$(VisualStudioVersion)' == '10.0' And '$(IsCodedUITest)' == 'True'">
       <ItemGroup>
@@ -104,15 +94,8 @@
       </ItemGroup>
     </When>
   </Choose>
-  <Choose>
-    <When Condition="('$(VisualStudioVersion)' == '10.0' Or '$(VisualStudioVersion)' == '11.0') And '$(IsCodedUITest)' == 'True'">
-      <ItemGroup>
-        <Reference Include="UIAutomationTypes" />
-      </ItemGroup>
-    </When>
-  </Choose>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

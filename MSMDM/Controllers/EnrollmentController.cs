@@ -1,4 +1,13 @@
-﻿using Org.BouncyCastle.Asn1;
+﻿using System;
+using System.Collections;
+using System.IO;
+using System.Security.Cryptography.X509Certificates;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Web.Mvc;
+using MSMDM.Core;
+using Org.BouncyCastle.Asn1;
+using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Prng;
@@ -7,26 +16,36 @@ using Org.BouncyCastle.Pkcs;
 using Org.BouncyCastle.Security;
 using Org.BouncyCastle.Utilities;
 using Org.BouncyCastle.X509;
-using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Web;
-using System.Web.Mvc;
+using X509Certificate = System.Security.Cryptography.X509Certificates.X509Certificate;
 
 namespace MSMDM.Controllers
 {
     [RoutePrefix("EnrollmentServer")]
     public class EnrollmentController : Controller
     {
+        private const int strength = 2048;
+        private const string signatureAlgorithm = "SHA256WithRSA";
+
         [HttpGet] // used by windows 8.1
         [Route("contract")]
         public ActionResult GetContract()
         {
-            string response = @"{""DeviceRegistrationService"":{""RegistrationEndpoint"":""https:\/\/sts.contoso.com\/EnrollmentServer\/DeviceEnrollmentWebService.svc"",""RegistrationResourceId"":""urn:ms-drs:sts.contoso.com"",""ServiceVersion"":""1.0""},""AuthenticationService"":{""OAuth2"":{""AuthCodeEndpoint"":""https:\/\/sts.contoso.com\/adfs\/oauth2\/authorize"",""TokenEndpoint"":""https:\/\/sts.con toso.com\/adfs\/oauth2\/token""}},""IdentityProviderService"":{""PassiveAuthEndpoint"":""https:\/\/ sts.contoso.com\/adfs\/ls""}}";
+            var response = @"
+{""DeviceRegistrationService"": {
+        ""RegistrationEndpoint"":""https:\/\/sts.contoso.com\/EnrollmentServer\/DeviceEnrollmentWebService.svc"",
+        ""RegistrationResourceId"":""urn:ms-drs:sts.contoso.com"",
+        ""ServiceVersion"":""1.0""
+    },
+    ""AuthenticationService"": {
+        ""OAuth2"": { 
+            ""AuthCodeEndpoint"":""https:\/\/sts.contoso.com\/adfs\/oauth2\/authorize"",
+            ""TokenEndpoint"":""https:\/\/sts.con toso.com\/adfs\/oauth2\/token""
+        }
+    },
+    ""IdentityProviderService"": {
+        ""PassiveAuthEndpoint"":""https:\/\/sts.contoso.com\/adfs\/ls""
+    }
+}";
 
             return Content(response, "application/json");
         }
@@ -42,17 +61,16 @@ namespace MSMDM.Controllers
         [Route("Discovery.svc")]
         public ActionResult PostDiscovery()
         {
-            Stream req = Request.InputStream;
-            req.Seek(0, System.IO.SeekOrigin.Begin);
-            string request = new StreamReader(req).ReadToEnd();
+            var requestString = GetRequestString();
 
-            string response = "";
+            var response = "";
 
-            Regex messageIdRegex = new Regex("<a:MessageID>(?<messageId>[a-z0-9:-]+)</a:MessageID>", RegexOptions.Multiline);
-            Match match = messageIdRegex.Match(request);
+            var messageIdRegex = new Regex("<a:MessageID>(?<messageId>[a-z0-9:-]+)</a:MessageID>",
+                RegexOptions.Multiline);
+            var match = messageIdRegex.Match(requestString);
             if (match.Success)
             {
-                string template = @"
+                var template = @"
 <s:Envelope xmlns:s=""http://www.w3.org/2003/05/soap-envelope"" xmlns:a=""http://www.w3.org/2005/08/addressing"">
     <s:Header>
         <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/management/2012/01/enrollment/IDiscoveryService/DiscoverResponse</a:Action>
@@ -71,37 +89,39 @@ namespace MSMDM.Controllers
     </s:Body>
 </s:Envelope>";
 
-                string enrollmentUrl = "https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Enrollment.svc";
+                var enrollmentUrl = "https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Enrollment.svc";
 
-                response = string.Format(template, System.Guid.NewGuid().ToString("D"), match.Groups["messageId"], enrollmentUrl);
+                response = string.Format(template, Guid.NewGuid().ToString("D"), match.Groups["messageId"],
+                    enrollmentUrl);
             }
 
-            return Content(response, "application/soap+xml", System.Text.Encoding.UTF8);
+            return Content(response, "application/soap+xml", Encoding.UTF8);
         }
 
         [HttpPost]
         [Route("Policy.svc")]
         public ActionResult PostService()
         {
-            Stream req = Request.InputStream;
-            req.Seek(0, System.IO.SeekOrigin.Begin);
-            string request = new StreamReader(req).ReadToEnd();
+            var requestString = GetRequestString();
+            var response = "";
 
-            string response = "";
+            var messageIdPattern = new Regex(@"<a:MessageID>(?<messageId>[a-zA-Z0-9:-]+)</a:MessageID>",
+                RegexOptions.Multiline);
+            var usernameTokenPattern = new Regex(@"<wsse:UsernameToken u:Id=""(?<usernameToken>[a-zA-Z0-9-]+)"">",
+                RegexOptions.Multiline);
 
-            Regex messageIdPattern = new Regex(@"<a:MessageID>(?<messageId>[a-zA-Z0-9:-]+)</a:MessageID>", RegexOptions.Multiline);
-            Regex usernameTokenPattern = new Regex(@"<wsse:UsernameToken u:Id=""(?<usernameToken>[a-zA-Z0-9-]+)"">", RegexOptions.Multiline);
+            var messageId = messageIdPattern.Match(requestString).Groups["messageId"].Value;
+            var usernameToken = usernameTokenPattern.Match(requestString).Groups["usernameToken"].Value;
 
-            string messageId = messageIdPattern.Match(request).Groups["messageId"].Value;
-            string usernameToken = usernameTokenPattern.Match(request).Groups["usernameToken"].Value;
-
-            string template = @"
+            var template = @"
 <s:Envelope
   xmlns:a=""http://www.w3.org/2005/08/addressing""
   xmlns:s=""http://www.w3.org/2003/05/soap-envelope"">
   <s:Header>
      <a:Action s:mustUnderstand=""1"">http://schemas.microsoft.com/windows/pki/2009/01/enrollmentpolicy/IPolicy/GetPoliciesResponse</a:Action>
-     <ActivityId CorrelationId=""" + System.Guid.NewGuid().ToString("D") + @""" xmlns=""http://schemas.microsoft.com/2004/09/ServiceModel/Diagnostics"">" + System.Guid.NewGuid().ToString("D") + @"</ActivityId>
+     <ActivityId CorrelationId=""" + Guid.NewGuid().ToString("D") +
+                           @""" xmlns=""http://schemas.microsoft.com/2004/09/ServiceModel/Diagnostics"">" +
+                           Guid.NewGuid().ToString("D") + @"</ActivityId>
      <a:RelatesTo>{0}</a:RelatesTo>
    </s:Header>
    <s:Body
@@ -109,7 +129,7 @@ namespace MSMDM.Controllers
     xmlns:xsd=""http://www.w3.org/2001/XMLSchema"">
     <GetPoliciesResponse xmlns=""http://schemas.microsoft.com/windows/pki/2009/01/enrollmentpolicy"">
       <response>
-        <policyID>" + System.Guid.NewGuid().ToString() + @"</policyID>
+        <policyID>" + Guid.NewGuid() + @"</policyID>
         <policyFriendlyName xsi:nil=""true"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""/>
         <nextUpdateHours xsi:nil=""true"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""/>
         <policiesNotChanged xsi:nil=""true"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance""/>
@@ -157,33 +177,40 @@ namespace MSMDM.Controllers
 ";
             response = string.Format(template, messageId);
 
-            return Content(response, "application/soap+xml", System.Text.Encoding.UTF8);
+            return Content(response, "application/soap+xml", Encoding.UTF8);
         }
 
         [HttpPost]
         [Route("Enrollment.svc")]
         public ActionResult PostEnrollment()
         {
-            Stream req = Request.InputStream;
-            req.Seek(0, System.IO.SeekOrigin.Begin);
-            string request = new StreamReader(req).ReadToEnd();
+            var requestString = GetRequestString();
+            var response = "";
 
-            string response = "";
+            var messageIdPattern = new Regex(@"<a:MessageID>(?<messageId>[a-zA-Z0-9:-]+)</a:MessageID>",
+                RegexOptions.Multiline);
+            var usernameTokenPattern = new Regex(@"<wsse:UsernameToken u:Id=""(?<usernameToken>[a-zA-Z0-9-]+)"">",
+                RegexOptions.Multiline);
+            var deviceTypePattern =
+                new Regex(
+                    @"<ac:ContextItem Name=""DeviceType"">\s+<ac:Value>(?<deviceType>.*)</ac:Value>\s+</ac:ContextItem>",
+                    RegexOptions.Multiline);
+            var applicationVersionPattern =
+                new Regex(
+                    @"<ac:ContextItem Name=""ApplicationVersion"">\s+<ac:Value>(?<applicationVersion>.*)</ac:Value>\s+</ac:ContextItem>",
+                    RegexOptions.Multiline);
+            var binarySecurityTokenPattern =
+                new Regex(@"<wsse:BinarySecurityToken\b[^>]*>(?<securityToken>.*?)</wsse:BinarySecurityToken>",
+                    RegexOptions.Multiline);
 
-            Regex messageIdPattern = new Regex(@"<a:MessageID>(?<messageId>[a-zA-Z0-9:-]+)</a:MessageID>", RegexOptions.Multiline);
-            Regex usernameTokenPattern = new Regex(@"<wsse:UsernameToken u:Id=""(?<usernameToken>[a-zA-Z0-9-]+)"">", RegexOptions.Multiline);
-            Regex deviceTypePattern = new Regex(@"<ac:ContextItem Name=""DeviceType"">\s+<ac:Value>(?<deviceType>.*)</ac:Value>\s+</ac:ContextItem>", RegexOptions.Multiline);
-            Regex applicationVersionPattern = new Regex(@"<ac:ContextItem Name=""ApplicationVersion"">\s+<ac:Value>(?<applicationVersion>.*)</ac:Value>\s+</ac:ContextItem>", RegexOptions.Multiline);
-            Regex binarySecurityTokenPattern = new Regex(@"<wsse:BinarySecurityToken\b[^>]*>(?<securityToken>.*?)</wsse:BinarySecurityToken>", RegexOptions.Multiline);
-            
 
-            string messageId = messageIdPattern.Match(request).Groups["messageId"].Value;
-            string usernameToken = usernameTokenPattern.Match(request).Groups["usernameToken"].Value;
-            string deviceType = deviceTypePattern.Match(request).Groups["deviceType"].Value;
-            string applicationVersion = applicationVersionPattern.Match(request).Groups["applicationVersion"].Value;
-            string securityToken = binarySecurityTokenPattern.Match(request).Groups["securityToken"].Value;
+            var messageId = messageIdPattern.Match(requestString).Groups["messageId"].Value;
+            var usernameToken = usernameTokenPattern.Match(requestString).Groups["usernameToken"].Value;
+            var deviceType = deviceTypePattern.Match(requestString).Groups["deviceType"].Value;
+            var applicationVersion = applicationVersionPattern.Match(requestString).Groups["applicationVersion"].Value;
+            var securityToken = binarySecurityTokenPattern.Match(requestString).Groups["securityToken"].Value;
 
-            string template = @"
+            var template = @"
 <s:Envelope xmlns:s=""http://schemas.xmlsoap.org/soap/envelope/""
     xmlns:a=""http://www.w3.org/2005/08/addressing""
     xmlns:u=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
@@ -192,8 +219,8 @@ namespace MSMDM.Controllers
         <a:RelatesTo>{0}</a:RelatesTo>
         <o:Security s:mustUnderstand=""1"" xmlns:o=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
             <u:Timestamp u:Id=""_0"">
-            <u:Created>2014-04-01T00:32:59.420Z</u:Created>
-            <u:Expires>2020-04-01T00:37:59.420Z</u:Expires>
+            <u:Created>{2}</u:Created>
+            <u:Expires>{3}</u:Expires>
             </u:Timestamp>
         </o:Security>
     </s:Header>
@@ -215,26 +242,29 @@ namespace MSMDM.Controllers
     </s:Body>
 </s:Envelope>";
 
-            response = string.Format(template, messageId, GetToken(securityToken));
+            DateTimeOffset createdTime = DateTimeOffset.UtcNow;
+            DateTimeOffset expiresTime = createdTime.AddYears(6).AddMinutes(5);
 
-            return Content(response, "application/soap+xml", System.Text.Encoding.UTF8);
+            response = string.Format(template, messageId, GetToken(securityToken),createdTime.ToString("O"),expiresTime.ToString("O"));
+
+            return Content(response, "application/soap+xml", Encoding.UTF8);
         }
 
-        const int strength = 2048;
-        const string signatureAlgorithm = "SHA256WithRSA";
-
-        private static System.Security.Cryptography.X509Certificates.X509Certificate2 LoadCertificate(string issuerFileName, string password)
+        private string GetRequestString()
         {
-            var issuerCertificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(issuerFileName, password, System.Security.Cryptography.X509Certificates.X509KeyStorageFlags.Exportable);
-            return issuerCertificate;
+            var req = Request.InputStream;
+            req.Seek(0, SeekOrigin.Begin);
+            var request = new StreamReader(req).ReadToEnd();
+            return request;
         }
 
-        private CertSignResponse GenerateSignedCertificate(Org.BouncyCastle.Asn1.Pkcs.CertificationRequestInfo csrInfo)
+        private CertSignResponse GenerateSignedCertificate(CertificationRequestInfo csrInfo)
         {
-            RsaPublicKeyStructure publicKeyStructure = RsaPublicKeyStructure.GetInstance(csrInfo.SubjectPublicKeyInfo.GetPublicKey());
-            RsaKeyParameters subjectPublicKey = new RsaKeyParameters(false, publicKeyStructure.Modulus, publicKeyStructure.PublicExponent);
+            var publicKeyStructure = RsaPublicKeyStructure.GetInstance(csrInfo.SubjectPublicKeyInfo.GetPublicKey());
+            var subjectPublicKey = new RsaKeyParameters(false, publicKeyStructure.Modulus,
+                publicKeyStructure.PublicExponent);
 
-            var issuerCertificate = LoadCertificate(@"c:\ca\CAKey.pfx", null);
+            var issuerCertificate = CryptoHelpers.LoadCertificate(Server.MapPath(@"~/App_Data/CAKey.pfx"), null);
             var issuerName = issuerCertificate.Subject;
             var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
             var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
@@ -243,9 +273,9 @@ namespace MSMDM.Controllers
             var random = new SecureRandom(randomGenerator);
 
             var serialNumber = BigIntegers.CreateRandomInRange(
-                       BigInteger.One,
-                       BigInteger.ValueOf(Int64.MaxValue),
-                       random);
+                BigInteger.One,
+                BigInteger.ValueOf(Int64.MaxValue),
+                random);
 
             var certificateGenerator = new X509V3CertificateGenerator();
 
@@ -255,26 +285,17 @@ namespace MSMDM.Controllers
             certificateGenerator.SetSerialNumber(serialNumber);
             certificateGenerator.SetSignatureAlgorithm(signatureAlgorithm);
 
-            //certificateGenerator.SetSubjectDN(csrInfo.Subject);
             certificateGenerator.SetSubjectDN(new X509Name("CN=MSMDM Device"));
             certificateGenerator.SetPublicKey(subjectPublicKey);
 
-            ///// For Server Certificates Only
-            //var subjectAlternativeNames = new Asn1Encodable[]
-            //                                    {
-            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment"),
-            //                                        new GeneralName(GeneralName.DnsName, "enterpriseenrollment.dynamit.com.au")
-            //                                    };
-            //var subjectAlternativeNamesExtension = new DerSequence(subjectAlternativeNames);
-            //certificateGenerator.AddExtension(X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);
-
             certificateGenerator.AddExtension(X509Extensions.KeyUsage.Id, false, new KeyUsage(0xa0));
 
-            certificateGenerator.AddExtension(X509Extensions.ExtendedKeyUsage.Id, false, new ExtendedKeyUsage(new ArrayList() 
-                                                                                                                    { 
-                                                                                                                        KeyPurposeID.IdKPClientAuth,
-                                                                                                                        new DerObjectIdentifier("1.3.6.1.4.1.311.65.2.1")
-                                                                                                                    }));
+            certificateGenerator.AddExtension(X509Extensions.ExtendedKeyUsage.Id, false,
+                new ExtendedKeyUsage(new ArrayList
+                {
+                    KeyPurposeID.IdKPClientAuth,
+                    new DerObjectIdentifier("1.3.6.1.4.1.311.65.2.1")
+                }));
 
             var notBefore = DateTime.UtcNow.Date;
             var notAfter = notBefore.AddYears(1);
@@ -284,54 +305,44 @@ namespace MSMDM.Controllers
 
             // Add CA Reference to Chain
             var authorityKeyIdentifierExtension =
-              new AuthorityKeyIdentifier(
-                  SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(issuerKeyPair.Public),
-                  new GeneralNames(new GeneralName(issuerDN)),
-                  issuerSerialNumber);
-            certificateGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false, authorityKeyIdentifierExtension);
+                new AuthorityKeyIdentifier(
+                    SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(issuerKeyPair.Public),
+                    new GeneralNames(new GeneralName(issuerDN)),
+                    issuerSerialNumber);
+            certificateGenerator.AddExtension(X509Extensions.AuthorityKeyIdentifier.Id, false,
+                authorityKeyIdentifierExtension);
 
             var subjectKeyIdentifierExtension =
-                         new SubjectKeyIdentifier(
-                             SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(subjectPublicKey));
-            certificateGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier.Id, false, subjectKeyIdentifierExtension);
+                new SubjectKeyIdentifier(
+                    SubjectPublicKeyInfoFactory.CreateSubjectPublicKeyInfo(subjectPublicKey));
+            certificateGenerator.AddExtension(X509Extensions.SubjectKeyIdentifier.Id, false,
+                subjectKeyIdentifierExtension);
 
             var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
 
             certificate.Verify(issuerKeyPair.Public);
-            System.Security.Cryptography.X509Certificates.X509Certificate msCert = DotNetUtilities.ToX509Certificate(certificate);
+            var msCert = DotNetUtilities.ToX509Certificate(certificate);
 
-            string issuerBase64 = Convert.ToBase64String(issuerCertificate.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
-            string issuerSerial = issuerCertificate.GetSerialNumberString();
-            
-            string certBase64 = Convert.ToBase64String(msCert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert));
-            string certSerial = msCert.GetSerialNumberString();
+            var issuerBase64 = Convert.ToBase64String(issuerCertificate.Export(X509ContentType.Cert));
+            var issuerSerial = issuerCertificate.GetSerialNumberString();
 
-            System.IO.File.WriteAllText(@"c:\ca\enroll-" + msCert.GetSerialNumberString() + ".cer", ExportToPEM(msCert));
-            
+            var certBase64 = Convert.ToBase64String(msCert.Export(X509ContentType.Cert));
+            var certSerial = msCert.GetSerialNumberString();
+
+            System.IO.File.WriteAllText(Server.MapPath(@"~/App_Data/enroll-" + msCert.GetSerialNumberString() + ".cer"), CryptoHelpers.ExportToPEM(msCert));
+
             return new CertSignResponse(issuerBase64, issuerSerial, certBase64, certSerial);
-        }
-
-        public static string ExportToPEM(System.Security.Cryptography.X509Certificates.X509Certificate cert)
-        {
-            StringBuilder builder = new StringBuilder();
-
-            builder.AppendLine("-----BEGIN CERTIFICATE-----");
-            builder.AppendLine(Convert.ToBase64String(cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Cert), Base64FormattingOptions.InsertLineBreaks));
-            builder.AppendLine("-----END CERTIFICATE-----");
-
-            return builder.ToString();
         }
 
         private string GetToken(string binarySecurityToken)
         {
-            byte[] encoded = Convert.FromBase64String(binarySecurityToken);
+            var encoded = Convert.FromBase64String(binarySecurityToken);
             var csr = new Pkcs10CertificationRequest(encoded);
 
             var requestInfo = csr.GetCertificationRequestInfo();
+            var response = GenerateSignedCertificate(requestInfo);
 
-            CertSignResponse response = GenerateSignedCertificate(requestInfo);
-
-            string template = @"<wap-provisioningdoc version=""1.1"">
+            var template = @"<wap-provisioningdoc version=""1.1"">
     <characteristic type=""CertificateStore"">
         <characteristic type=""Root"">
             <characteristic type=""System"">
@@ -396,24 +407,18 @@ namespace MSMDM.Controllers
     </characteristic>
 </wap-provisioningdoc>";
 
-            string fullToken = string.Format(template, response.IssuerSerial, response.IssuerBase64, response.CertSerial, response.CertBase64);
+            var fullToken = string.Format(template, response.IssuerSerial, response.IssuerBase64, response.CertSerial,
+                response.CertBase64);
 
-            return EncodeToBase64(fullToken);
-        }
-
-        static public string EncodeToBase64(string toEncode)
-        {
-            byte[] toEncodeAsBytes = System.Text.ASCIIEncoding.ASCII.GetBytes(toEncode);
-            string returnValue = System.Convert.ToBase64String(toEncodeAsBytes);
-            return returnValue;
+            return CryptoHelpers.EncodeToBase64(fullToken);
         }
 
         [Route("CACert.cer")]
         public ActionResult CACert()
         {
-            string cert = System.IO.File.ReadAllText(@"c:\ca\CACert.cer");
-            return Content(cert, 
-            "application/x-x509-ca-cert");
+            var cert = System.IO.File.ReadAllText(Server.MapPath(@"~/App_Data/CACert.cer"));
+            return Content(cert,
+                "application/x-x509-ca-cert");
         }
     }
 }

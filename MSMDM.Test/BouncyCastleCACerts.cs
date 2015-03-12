@@ -23,6 +23,7 @@ using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Utilities.IO.Pem;
 using MSCert = System.Security.Cryptography.X509Certificates;
 using System.Diagnostics;
+using MSMDM.Core;
 using NUnit.Framework;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Shouldly;
@@ -105,10 +106,10 @@ namespace MSMDM.Test
             certificateGenerator.AddExtension(X509Extensions.BasicConstraints.Id, true, new BasicConstraints(true));
 
             var certificate = certificateGenerator.Generate(subjectKeyPair.Private, random);
-            var x509Cert = ConvertCertificate(certificate, subjectKeyPair, random);
-            WriteCertificate(x509Cert, CAKeyFile);
+            var x509Cert = CryptoHelpers.ConvertCertificate(certificate, subjectKeyPair, random);
+            CryptoHelpers.SaveCertificate(x509Cert, CAKeyFile);
 
-            File.WriteAllText(CACertFile, ExportToPEM(x509Cert));
+            File.WriteAllText(CACertFile, CryptoHelpers.ExportToPEM(x509Cert));
 
             File.Exists(CACertFile).ShouldBe(true);
             File.Exists(CAKeyFile).ShouldBe(true);
@@ -135,8 +136,8 @@ namespace MSMDM.Test
                                                                   new DerSet(),
                                                                   subjectKeyPair.Private);
 
-            File.WriteAllText(csrPrivateFile, ExportToPEM(subjectKeyPair.Private));
-            File.WriteAllText(csrRequestFile, ExportToPEM(csr));
+            File.WriteAllText(csrPrivateFile, CryptoHelpers.ExportToPEM(subjectKeyPair.Private));
+            File.WriteAllText(csrRequestFile, CryptoHelpers.ExportToPEM(csr));
         }
 
         [Test]
@@ -156,7 +157,7 @@ namespace MSMDM.Test
 
             bool certIsOK = csr.Verify(subjectPublicKey);
 
-            var issuerCertificate = LoadCertificate(CAKeyFile, null);
+            var issuerCertificate = CryptoHelpers.LoadCertificate(CAKeyFile, null);
             var issuerName = issuerCertificate.Subject;
             var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
             var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
@@ -220,7 +221,7 @@ namespace MSMDM.Test
             var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
 
             certificate.Verify(issuerKeyPair.Public);
-            File.WriteAllText(certSignedFile, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
+            File.WriteAllText(certSignedFile, CryptoHelpers.ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
         }
 
         [Test]
@@ -239,7 +240,7 @@ namespace MSMDM.Test
         {
             string subjectName = "CN=ClientCertificate";
 
-            var issuerCertificate = LoadCertificate(CAKeyFile, "");
+            var issuerCertificate = CryptoHelpers.LoadCertificate(CAKeyFile, "");
             var issuerName = issuerCertificate.Subject;
             var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
             var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
@@ -296,144 +297,8 @@ namespace MSMDM.Test
 
             var certificate = certificateGenerator.Generate(issuerKeyPair.Private, random);
 
-            File.WriteAllText(certSignedFile, ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
-            File.WriteAllText(certKeyFile, ExportToPEM(subjectKeyPair.Private));
-        }
-
-        string[] certs = new string[] { };
-
-        [Test]
-        [TestCase("Client_Signed.cer")]
-        public void ReadIssued(string fileName)
-        {
-            X509CertificateParser parser = new X509CertificateParser();
-            PkixCertPathBuilder builder = new PkixCertPathBuilder();
-
-            // Separate root from intermediate
-            var intermediateCerts = new List<X509Certificate>();
-            HashSet rootCerts = new HashSet();
-
-            foreach (string certString in certs)
-            {
-                StringReader StringReader = new StringReader(certString);
-                PemReader pem = new PemReader(StringReader);
-                var cert = parser.ReadCertificate(pem.ReadPemObject().Content);
-
-                // Separate root and subordinate certificates
-                if (cert.IssuerDN.Equivalent(cert.SubjectDN))
-                {
-                    rootCerts.Add(new TrustAnchor(cert, null));
-                }
-                else
-                {
-                    intermediateCerts.Add(cert);
-                    Debug.WriteLine("Leaf ->");
-                }
-
-                Debug.WriteLine("\tCertificate: " + cert.SubjectDN);
-                Debug.WriteLine("\tIssuer: " + cert.SubjectDN);
-            }
-
-            TextReader reader = File.OpenText(fileName);
-            PemReader pemReader = new PemReader(reader);
-            var primary = parser.ReadCertificate(pemReader.ReadPemObject().Content);
-
-            // Create chain for this certificate
-            X509CertStoreSelector holder = new X509CertStoreSelector();
-            holder.Certificate = primary;
-
-            // WITHOUT THIS LINE BUILDER CANNOT BEGIN BUILDING THE CHAIN
-            intermediateCerts.Add(holder.Certificate);
-
-            PkixBuilderParameters builderParams = new PkixBuilderParameters(rootCerts, holder);
-            builderParams.IsRevocationEnabled = false;
-
-            X509CollectionStoreParameters intermediateStoreParameters = new X509CollectionStoreParameters(intermediateCerts);
-
-            builderParams.AddStore(X509StoreFactory.Create("Certificate/Collection", intermediateStoreParameters));
-
-            PkixCertPathBuilderResult result = builder.Build(builderParams);
-
-            //return result.CertPath.Certificates.Cast<Org.BouncyCastle.X509.X509Certificate>();
-
-        }
-
-        private static MSCert.X509Certificate2 LoadCertificate(string issuerFileName, string password)
-        {
-            // We need to pass 'Exportable', otherwise we can't get the private key.
-            var issuerCertificate = new MSCert.X509Certificate2(issuerFileName, password, MSCert.X509KeyStorageFlags.Exportable);
-            return issuerCertificate;
-        }
-
-        public static string ExportToPEM(object csr)
-        {
-            string result;
-            using (MemoryStream mem = new MemoryStream())
-            {
-                StreamWriter writer = new StreamWriter(mem);
-                Org.BouncyCastle.OpenSsl.PemWriter pem = new Org.BouncyCastle.OpenSsl.PemWriter(writer);
-                pem.WriteObject(csr);
-                pem.Writer.Flush();
-
-                StreamReader reader = new StreamReader(mem);
-                mem.Position = 0;
-                result = reader.ReadToEnd();
-            }
-
-            return result;
-        }
-
-        /*public static string ExportToPEM(MSCert.X509Certificate cert)
-        {
-            StringBuilder builder = new StringBuilder();
-
-            builder.AppendLine("-----BEGIN CERTIFICATE-----");
-            builder.AppendLine(Convert.ToBase64String(cert.Export(MSCert.X509ContentType.Cert), Base64FormattingOptions.InsertLineBreaks));
-            builder.AppendLine("-----END CERTIFICATE-----");
-
-            return builder.ToString();
-        }*/
-
-        private static void WriteCertificate(MSCert.X509Certificate2 certificate, string outputFileName)
-        {
-            // This password is the one attached to the PFX file. Use 'null' for no password.
-            string password = null;
-            var bytes = certificate.Export(MSCert.X509ContentType.Pfx, password);
-            File.WriteAllBytes(outputFileName, bytes);
-        }
-
-        private static MSCert.X509Certificate2 ConvertCertificate(X509Certificate certificate,
-                                                          AsymmetricCipherKeyPair subjectKeyPair,
-                                                          SecureRandom random)
-        {
-            // Now to convert the Bouncy Castle certificate to a .NET certificate.
-            // See http://web.archive.org/web/20100504192226/http://www.fkollmann.de/v2/post/Creating-certificates-using-BouncyCastle.aspx
-            // ...but, basically, we create a PKCS12 store (a .PFX file) in memory, and add the public and private key to that.
-            var store = new Pkcs12Store();
-
-            // What Bouncy Castle calls "alias" is the same as what Windows terms the "friendly name".
-            string friendlyName = certificate.SubjectDN.ToString();
-
-            // Add the certificate.
-            var certificateEntry = new X509CertificateEntry(certificate);
-            store.SetCertificateEntry(friendlyName, certificateEntry);
-
-            // Add the private key.
-            store.SetKeyEntry(friendlyName, new AsymmetricKeyEntry(subjectKeyPair.Private), new[] { certificateEntry });
-
-            // Convert it to an X509Certificate2 object by saving/loading it from a MemoryStream.
-            // It needs a password. Since we'll remove this later, it doesn't particularly matter what we use.
-            const string password = "password";
-            var stream = new MemoryStream();
-            store.Save(stream, password.ToCharArray(), random);
-
-            var convertedCertificate =
-                new MSCert.X509Certificate2(stream.ToArray(),
-                                     password,
-                                     MSCert.X509KeyStorageFlags.PersistKeySet
-                                        | MSCert.X509KeyStorageFlags.Exportable);
-
-            return convertedCertificate;
+            File.WriteAllText(certSignedFile, CryptoHelpers.ExportToPEM(DotNetUtilities.ToX509Certificate(certificate)));
+            File.WriteAllText(certKeyFile, CryptoHelpers.ExportToPEM(subjectKeyPair.Private));
         }
     }
 }
