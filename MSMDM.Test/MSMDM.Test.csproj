@@ -69,7 +69,13 @@
     <Compile Include="WindowsPhoneEnrollment.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="IIS_Request.cer">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
+    <None Include="Test_Request.cer">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Content Include="Data\EnrollmentResponse.xml" />
