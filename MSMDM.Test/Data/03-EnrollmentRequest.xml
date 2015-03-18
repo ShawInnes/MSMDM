@@ -1,0 +1,32 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope" xmlns:a="http://www.w3.org/2005/08/addressing" xmlns:u="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd" xmlns:wst="http://docs.oasis-open.org/ws-sx/ws-trust/200512" xmlns:ac="http://schemas.xmlsoap.org/ws/2006/12/authorization">
+	<s:Header>
+		<a:Action s:mustUnderstand="1">http://schemas.microsoft.com/windows/pki/2009/01/enrollment/RST/wstep</a:Action>
+		<a:MessageID>urn:uuid:0d5a1441-5891-453b-becf-a2e5f6ea3749</a:MessageID>
+		<a:ReplyTo>
+			<a:Address>http://www.w3.org/2005/08/addressing/anonymous</a:Address>
+		</a:ReplyTo>
+		<a:To s:mustUnderstand="1">https://enterpriseenrollment.dynamit.com.au/EnrollmentServer/Enrollment.svc</a:To>
+		<wsse:Security s:mustUnderstand="1">
+			<wsse:UsernameToken u:Id="uuid-cc1ccc1f-2fba-4bcf-b063-ffc0cac77917-4">
+				<wsse:Username>somedomain\shaw</wsse:Username>
+				<wsse:Password wsse:Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">test</wsse:Password>
+			</wsse:UsernameToken>
+		</wsse:Security>
+	</s:Header>
+	<s:Body>
+		<wst:RequestSecurityToken>
+			<wst:TokenType>http://schemas.microsoft.com/5.0.0.0/ConfigurationManager/Enrollment/DeviceEnrollmentToken</wst:TokenType>
+			<wst:RequestType>http://docs.oasis-open.org/ws-sx/ws-trust/200512/Issue</wst:RequestType>
+			<wsse:BinarySecurityToken ValueType="http://schemas.microsoft.com/windows/pki/2009/01/enrollment#PKCS10" EncodingType="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd#base64binary">MIICcTCCAV0CAQAwMDEuMCwGA1UEAxMlQjFDNDNDRDAtMTYyNC01RkJCLThFNTQtMzRDRjE3REZEM0ExADCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKA8idN/m/GpUPxZ6YgFkAAwKqJlDW6KAuiwov3+y4S4+Io50i/YvoElUaeXb/msok8fHMGgD0rmgIx36k5h5QAM2M3xIP2DVwuwb5DhotECgmnuSySArccsAFsRVF4peiliI39uwcQqcqsEyMhAoIHwkfZLFpwQGmtB7+i1hLmrBsKoM2+ZPXo7Qj7V55oIhEPC1tfAitEWiIPv4k61hBFItbSW5HhnM+TYPRMB4kmG+/OAap3fQ/RX5KCQabJLuxUsylUXvvnUpmvD1Vk6WrCINiDzDbKBde6A02S2exhKItPID0OYAch+Yw1SEJZhH0O0pFoYFz/QY/HuFdWXB6ECAwEAAaAAMAkGBSsOAwIdBQADggEBAFy/06fZC8VNAlbFF462YMUYP5ZXQomDIpu9tKgjkJhGFhUl4wgBNNQHqjmisuMkd8G7cUsdWdweZegfwWVRWZKdrl+FovXEnZYN/MQvzkIuj8t0ePbzsbY0wilzVgEalbmp2RKNC1mIDkYcSYWEszDX4lf6bBEkLtxqsXMZfD7AGFjRlVCtV23m5hV3Jc5JiVv18SQ2PDcGtmOZi4S9rL5ThOxw24i61C6Z/RFN1RJwiGA0obYQENngQFugo9/KD71cUa+C2ksZh7bVNNniA+n7NcfYCoRUM6PEZ1eChcLIeNM3I2EAs/Eb/DFKUqloQDaCRgNXnaNJQgUDg7mKc8U=</wsse:BinarySecurityToken>
+			<ac:AdditionalContext xmlns="http://schemas.xmlsoap.org/ws/2006/12/authorization">
+				<ac:ContextItem Name="DeviceType">
+					<ac:Value>WindowsPhone</ac:Value>
+				</ac:ContextItem>
+				<ac:ContextItem Name="ApplicationVersion">
+					<ac:Value>8.10.12393.890</ac:Value>
+				</ac:ContextItem>
+			</ac:AdditionalContext>
+		</wst:RequestSecurityToken>
+	</s:Body>
+</s:Envelope>

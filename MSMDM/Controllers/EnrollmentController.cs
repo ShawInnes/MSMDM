@@ -1,14 +1,17 @@
 ﻿using System;
 using System.Collections;
+using System.IdentityModel.Protocols.WSTrust;
 using System.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Web.Mvc;
 using MSMDM.Core;
+using MSMDM.Models;
 using Org.BouncyCastle.Asn1;
 using Org.BouncyCastle.Asn1.Pkcs;
 using Org.BouncyCastle.Asn1.X509;
+using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Parameters;
 using Org.BouncyCastle.Crypto.Prng;
 using Org.BouncyCastle.Math;
@@ -24,7 +27,7 @@ namespace MSMDM.Controllers
     public class EnrollmentController : Controller
     {
         private const int strength = 2048;
-        private const string signatureAlgorithm = "SHA256WithRSA";
+        private const string signatureAlgorithm = "SHA1WithRSA";
 
         [HttpGet] // used by windows 8.1
         [Route("contract")]
@@ -210,8 +213,7 @@ namespace MSMDM.Controllers
             var applicationVersion = applicationVersionPattern.Match(requestString).Groups["applicationVersion"].Value;
             var securityToken = binarySecurityTokenPattern.Match(requestString).Groups["securityToken"].Value;
 
-            var template = @"
-<s:Envelope xmlns:s=""http://schemas.xmlsoap.org/soap/envelope/""
+            var template = @"<s:Envelope xmlns:s=""http://schemas.xmlsoap.org/soap/envelope/""
     xmlns:a=""http://www.w3.org/2005/08/addressing""
     xmlns:u=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd"">
     <s:Header>
@@ -232,9 +234,7 @@ namespace MSMDM.Controllers
                 <BinarySecurityToken
                     ValueType=""http://schemas.microsoft.com/5.0.0.0/ConfigurationManager/Enrollment/DeviceEnrollmentProvisionDoc""
                     EncodingType=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd#base64binary""
-                    xmlns=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">
-                    {1}
-                </BinarySecurityToken>
+                    xmlns=""http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd"">{1}</BinarySecurityToken>
             </RequestedSecurityToken>
             <RequestID xmlns=""http://schemas.microsoft.com/windows/pki/2009/01/enrollment"">0</RequestID>
             </RequestSecurityTokenResponse>
@@ -245,7 +245,7 @@ namespace MSMDM.Controllers
             DateTimeOffset createdTime = DateTimeOffset.UtcNow;
             DateTimeOffset expiresTime = createdTime.AddYears(6).AddMinutes(5);
 
-            response = string.Format(template, messageId, GetToken(securityToken),createdTime.ToString("O"),expiresTime.ToString("O"));
+            response = string.Format(template, messageId, GetToken(securityToken), createdTime.ToString("O"), expiresTime.ToString("O"));
 
             return Content(response, "application/soap+xml", Encoding.UTF8);
         }
@@ -263,8 +263,9 @@ namespace MSMDM.Controllers
             var publicKeyStructure = RsaPublicKeyStructure.GetInstance(csrInfo.SubjectPublicKeyInfo.GetPublicKey());
             var subjectPublicKey = new RsaKeyParameters(false, publicKeyStructure.Modulus,
                 publicKeyStructure.PublicExponent);
+            var subjectName = csrInfo.Subject;
 
-            var issuerCertificate = CryptoHelpers.LoadCertificate(Server.MapPath(@"~/App_Data/CAKey.pfx"), null);
+            var issuerCertificate = CryptoHelpers.LoadCertificate(Server.MapPath(@"~/App_Data/CA.pfx"), null);
             var issuerName = issuerCertificate.Subject;
             var issuerSerialNumber = new BigInteger(issuerCertificate.GetSerialNumber());
             var issuerKeyPair = DotNetUtilities.GetKeyPair(issuerCertificate.PrivateKey);
@@ -285,7 +286,7 @@ namespace MSMDM.Controllers
             certificateGenerator.SetSerialNumber(serialNumber);
             certificateGenerator.SetSignatureAlgorithm(signatureAlgorithm);
 
-            certificateGenerator.SetSubjectDN(new X509Name("CN=MSMDM Device"));
+            certificateGenerator.SetSubjectDN(subjectName);
             certificateGenerator.SetPublicKey(subjectPublicKey);
 
             certificateGenerator.AddExtension(X509Extensions.KeyUsage.Id, false, new KeyUsage(0xa0));
@@ -296,7 +297,7 @@ namespace MSMDM.Controllers
                     KeyPurposeID.IdKPClientAuth,
                     new DerObjectIdentifier("1.3.6.1.4.1.311.65.2.1")
                 }));
-
+            
             var notBefore = DateTime.UtcNow.Date;
             var notAfter = notBefore.AddYears(1);
 
@@ -323,15 +324,27 @@ namespace MSMDM.Controllers
             certificate.Verify(issuerKeyPair.Public);
             var msCert = DotNetUtilities.ToX509Certificate(certificate);
 
-            var issuerBase64 = Convert.ToBase64String(issuerCertificate.Export(X509ContentType.Cert));
-            var issuerSerial = issuerCertificate.GetSerialNumberString();
+            var issuerDer = issuerCertificate.Export(X509ContentType.Cert);
+            var issuerBase64 = Convert.ToBase64String(issuerDer);
+            var issuerThumbprint = Sha1Hash(issuerDer);
 
-            var certBase64 = Convert.ToBase64String(msCert.Export(X509ContentType.Cert));
-            var certSerial = msCert.GetSerialNumberString();
+            var certDer = msCert.Export(X509ContentType.Cert);
+            var certBase64 = Convert.ToBase64String(certDer);
+            var certThumbprint = Sha1Hash(certDer);
 
-            System.IO.File.WriteAllText(Server.MapPath(@"~/App_Data/enroll-" + msCert.GetSerialNumberString() + ".cer"), CryptoHelpers.ExportToPEM(msCert));
+            // System.IO.File.WriteAllText(Server.MapPath(@"~/App_Data/enroll-" + msCert.GetSerialNumberString() + ".cer"), CryptoHelpers.ExportToPEM(msCert));
 
-            return new CertSignResponse(issuerBase64, issuerSerial, certBase64, certSerial);
+            return new CertSignResponse(issuerBase64, issuerThumbprint, certBase64, certThumbprint);
+        }
+
+        private static string Sha1Hash(byte[] inputBytes)
+        {
+            Sha1Digest sha1 = new Sha1Digest();
+            sha1.BlockUpdate(inputBytes, 0, inputBytes.Length);
+            byte[] sha1Result = new byte[sha1.GetDigestSize()];
+            sha1.DoFinal(sha1Result, 0);
+
+            return BitConverter.ToString(sha1Result).Replace("-", string.Empty);
         }
 
         private string GetToken(string binarySecurityToken)
@@ -342,81 +355,20 @@ namespace MSMDM.Controllers
             var requestInfo = csr.GetCertificationRequestInfo();
             var response = GenerateSignedCertificate(requestInfo);
 
-            var template = @"<wap-provisioningdoc version=""1.1"">
-    <characteristic type=""CertificateStore"">
-        <characteristic type=""Root"">
-            <characteristic type=""System"">
-                <characteristic type=""{0}"">
-                    <parm name=""EncodedCertificate"" value=""{1}"" />
-                </characteristic>
-            </characteristic>
-        </characteristic>
-        <characteristic type=""My"" >
-            <characteristic type=""User"">
-                <characteristic type=""{2}"">
-                    <parm name=""EncodedCertificate"" value=""{3}"" /> 
-                </characteristic>
-                <characteristic type=""PrivateKeyContainer""/>
-                <!-- This tag must be present for XML syntax correctness. -->
-            </characteristic>
-        </characteristic>
-    </characteristic>
-    <characteristic type=""APPLICATION"">
-        <parm name=""APPID"" value=""w7""/>
-        <parm name=""PROVIDER-ID"" value=""TestMDMServer""/>
-        <parm name=""NAME"" value=""Microsoft""/>
-        <parm name=""ADDR"" value=""https://enterpriseenrollment.dynamit.com.au:443/""/>
-        <parm name=""CONNRETRYFREQ"" value=""6"" />
-        <parm name=""INITIALBACKOFFTIME"" value=""30000"" />
-        <parm name=""MAXBACKOFFTIME"" value=""120000"" />
-        <parm name=""BACKCOMPATRETRYDISABLED"" />
-        <parm name=""DEFAULTENCODING"" value=""application/vnd.syncml.dm+wbxml"" />
-        <parm name=""SSLCLIENTCERTSEARCHCRITERIA"" value=""Subject=CN%3dMSMDM%20Device&amp;Stores=My%5CUser""/>
-        <characteristic type=""APPAUTH"">
-        <parm name=""AAUTHLEVEL"" value=""CLIENT""/>
-        <parm name=""AAUTHTYPE"" value=""BASIC""/>
-        <parm name=""AAUTHNAME"" value=""testclient""/>
-        <parm name=""AAUTHSECRET"" value=""password2""/>
-        </characteristic>
-        <characteristic type=""APPAUTH"">
-            <parm name=""AAUTHLEVEL"" value=""APPSRV""/>
-            <parm name=""AAUTHTYPE"" value=""BASIC""/>
-            <parm name=""AAUTHNAME"" value=""testclient""/>
-            <parm name=""AAUTHSECRET"" value=""password2""/>
-        </characteristic>
-    </characteristic>
-    <characteristic type=""Registry"">
-        <characteristic type=""HKLM\Software\Microsoft\Enrollment"">
-            <parm name=""RenewalPeriod"" value=""42"" datatype=""integer"" />
-        </characteristic>
-        <characteristic type=""HKLM\Software\Microsoft\Enrollment\OmaDmRetry"">
-            <parm name=""NumRetries"" value=""8"" datatype=""integer"" />
-            <parm name=""RetryInterval"" value=""15"" datatype=""integer"" />
-            <parm name=""AuxNumRetries"" value=""5"" datatype=""integer"" />
-            <parm name=""AuxRetryInterval"" value=""3"" datatype=""integer"" />
-            <parm name=""Aux2NumRetries"" value=""0"" datatype=""integer"" />
-            <parm name=""Aux2RetryInterval"" value=""480"" datatype=""integer"" />
-        </characteristic>
-    </characteristic>
-    <characteristic type=""DMClient"">
-        <characteristic type=""Provider"">
-            <characteristic type=""TestMDMServer"">
-            <parm name=""EntDeviceName"" value=""Administrator_WindowsPhone"" datatype=""string"" />
-            </characteristic>
-        </characteristic>
-    </characteristic>
-</wap-provisioningdoc>";
+            var token = System.IO.File.ReadAllText(Server.MapPath(@"~/App_Data/token_template.xml"));
+            token = token.Replace("#{RootFingerprint}", response.IssuerThumbprint);
+            token = token.Replace("#{RootCertificate}", response.IssuerBase64);
+            token = token.Replace("#{UserFingerprint}", response.CertThumbprint);
+            token = token.Replace("#{UserCertificate}", response.CertBase64);
+            token = token.Replace("#{ApplicationAddress}", "http://10.0.1.57/");
 
-            var fullToken = string.Format(template, response.IssuerSerial, response.IssuerBase64, response.CertSerial,
-                response.CertBase64);
-
-            return CryptoHelpers.EncodeToBase64(fullToken);
+            return CryptoHelpers.EncodeToBase64(token);
         }
 
         [Route("CACert.cer")]
         public ActionResult CACert()
         {
-            var cert = System.IO.File.ReadAllText(Server.MapPath(@"~/App_Data/CACert.cer"));
+            var cert = System.IO.File.ReadAllText(Server.MapPath(@"~/App_Data/CA.cer"));
             return Content(cert,
                 "application/x-x509-ca-cert");
         }

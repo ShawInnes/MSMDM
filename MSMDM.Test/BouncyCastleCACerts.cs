@@ -185,8 +185,8 @@ namespace MSMDM.Test
             // For Server Certificates Only
             var subjectAlternativeNames = new Asn1Encodable[]
                                                 {
-                                                    new GeneralName(GeneralName.DnsName, "dnsname"),
-                                                    new GeneralName(GeneralName.DnsName, "*.domainname.com"),
+                                                    new GeneralName(GeneralName.DnsName, "msmdm.localhost"),
+                                                    new GeneralName(GeneralName.DnsName, "*.localhost")
                                                 };
             var subjectAlternativeNamesExtension = new DerSequence(subjectAlternativeNames);
             certificateGenerator.AddExtension(X509Extensions.SubjectAlternativeName.Id, false, subjectAlternativeNamesExtension);

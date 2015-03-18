@@ -99,6 +99,8 @@
     <Content Include="Data\01-DiscoveryResponse.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="Data\03-EnrollmentResponse.xml" />
+    <Content Include="Data\03-EnrollmentRequest.xml" />
     <Content Include="Data\EnrollmentResponse.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

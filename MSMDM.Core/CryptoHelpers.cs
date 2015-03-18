@@ -81,6 +81,14 @@ namespace MSMDM.Core
             return convertedCertificate;
         }
 
+        public static string EncodeToBase64UTF8(string toEncode)
+        {
+            var utf8bytes = Encoding.UTF8.GetBytes(toEncode);
+            var utf8bom = Encoding.UTF8.GetPreamble().Concat(utf8bytes).ToArray();
+            var returnValue = Convert.ToBase64String(utf8bom);
+            return returnValue;
+        }
+
         public static string EncodeToBase64(string toEncode)
         {
             var toEncodeAsBytes = Encoding.ASCII.GetBytes(toEncode);

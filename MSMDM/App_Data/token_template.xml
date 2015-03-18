@@ -1,0 +1,57 @@
+﻿<wap-provisioningdoc version="1.1">
+<characteristic type="CertificateStore">
+	<characteristic type="Root">
+		<characteristic type="#{RootFingerprint}">
+			<parm name="EncodedCertificate"
+				    value="#{RootCertificate}" />
+		</characteristic>
+	</characteristic>
+	<characteristic type="My">
+		<characteristic type="User">
+			<characteristic type="#{UserFingerprint}">
+				<parm name="EncodedCertificate"
+					    value="#{UserCertificate}" />
+			</characteristic>
+			<characteristic type="PrivateKeyContainer" />
+			<!-- This tag must be present for XML syntax correctness. -->
+		</characteristic>
+	</characteristic>
+</characteristic>
+<characteristic type="APPLICATION">
+	<parm name="APPID" value="w7" />
+	<parm name="PROVIDER-ID" value="TestMDMServer" />
+	<parm name="NAME" value="SOTI" />
+	<parm name="ADDR" value="#{ApplicationAddress}" />
+	<parm name="CONNRETRYFREQ" value="6" />
+	<parm name="INITIALBACKOFFTIME" value="30000" />
+	<parm name="MAXBACKOFFTIME" value="120000" />
+	<parm name="BACKCOMPATRETRYDISABLED" />
+	<parm name="DEFAULTENCODING" value="application/vnd.syncml.dm+wbxml" />
+	<parm name="SSLCLIENTCERTSEARCHCRITERIA" value="Subject=CN%3DB1C43CD0-1624-5FBB-8E54-34CF17DFD3A1&amp;Stores=MY%5CUser" />
+	<characteristic type="APPAUTH">
+		<parm name="AAUTHLEVEL" value="APPSRV" />
+		<parm name="AAUTHTYPE" value="BASIC" />
+		<parm name="AAUTHNAME" value="testclient" />
+		<parm name="AAUTHSECRET" value="password2" />
+	</characteristic>
+</characteristic>
+<characteristic type="Registry">
+	<characteristic type="HKLM\Software\Microsoft\Enrollment">
+		<parm name="RenewalPeriod" value="42" datatype="integer" />
+	</characteristic>
+	<characteristic type="HKLM\Software\Microsoft\Enrollment\OmaDmRetry">
+		<parm name="NumRetries" value="8" datatype="integer" />
+		<parm name="RetryInterval" value="15" datatype="integer" />
+		<parm name="AuxNumRetries" value="5" datatype="integer" />
+		<parm name="AuxRetryInterval" value="3" datatype="integer" />
+		<parm name="Aux2NumRetries" value="0" datatype="integer" />
+		<parm name="Aux2RetryInterval" value="480" datatype="integer" />
+	</characteristic>
+</characteristic>
+<characteristic type="DMClient">
+	<characteristic type="Provider">
+		<characteristic type="TestMDMServer">
+			<parm name="EntDeviceName" value="Administrator_WindowsPhone" datatype="string" />
+		</characteristic>
+	</characteristic>
+</characteristic>
